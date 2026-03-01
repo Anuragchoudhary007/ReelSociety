@@ -34,13 +34,12 @@ export default function SearchUsersScreen() {
 
     const q = query(
       collection(db, "friendRequests"),
-      where("from", "==", user.uid)
-    );
+where("senderId", "==", user.uid)    );
 
     return onSnapshot(q, (snapshot) => {
       setSentRequests(
-        snapshot.docs.map((doc) => doc.data().to)
-      );
+  snapshot.docs.map((doc) => doc.data().receiverId)
+);
     });
   }, []);
 

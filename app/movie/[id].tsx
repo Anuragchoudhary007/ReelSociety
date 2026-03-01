@@ -50,12 +50,19 @@ export default function MovieDetails() {
   const load = async (movieId: string) => {
     try {
       const data = await fetchMovieDetails(movieId);
+
+      if (!data || !data.id) {
+        console.log("Invalid movie data");
+        setLoading(false);
+        return;
+      }
+
       setMovie(data);
 
       const trailer = await fetchMovieTrailer(movieId);
       setTrailerKey(trailer);
 
-      // 🔥 Get user lists
+      // Get user lists
       const lists = await getUserLists();
       if (lists.length === 0) {
         setLoading(false);
@@ -65,11 +72,12 @@ export default function MovieDetails() {
       const firstList = lists[0];
       setListId(firstList.id);
 
-      // 🔥 Check if movie already in list
+      // Check if movie already exists
       const items = await getListItems(firstList.id);
       const found = items.some(
         (item: any) => item.id === movieId
       );
+
       setExists(found);
 
     } catch (e) {
@@ -80,7 +88,7 @@ export default function MovieDetails() {
   };
 
   const toggleWatchlist = async () => {
-    if (!movie || !listId) return;
+    if (!movie || !movie.id || !listId) return;
 
     if (exists) {
       await removeItemFromList(
@@ -99,7 +107,7 @@ export default function MovieDetails() {
 
     setExists(true);
 
-    // ❤️ Animation
+    // ❤️ Heart Animation
     setShowHeart(true);
 
     Animated.parallel([
@@ -215,7 +223,7 @@ export default function MovieDetails() {
         </View>
       )}
 
-      {/* Trailer Modal */}
+      {/* 🎬 Trailer Modal */}
       <Modal
         isVisible={showTrailer}
         onBackdropPress={() =>
@@ -279,6 +287,7 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
+    marginBottom: 10,
   },
   buttonText: {
     color: "#fff",

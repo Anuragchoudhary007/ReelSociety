@@ -1,97 +1,119 @@
-const BASE_URL = "https://api.themoviedb.org/3";
-const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
+const API_BASE = "http://192.168.0.104:3000/api/tmdb";
 
 export const IMAGE_BASE_URL =
   "https://image.tmdb.org/t/p/w780";
 
-/* ================= FETCH HELPER ================= */
+/* ================= SAFE FETCH ================= */
 
-const fetchData = async (
-  endpoint: string,
-  params: string = ""
-) => {
+const fetchFromProxy = async (endpoint: string) => {
   try {
-    const response = await fetch(
-      `${BASE_URL}${endpoint}?api_key=${API_KEY}${params}`
-    );
+    const res = await fetch(`${API_BASE}${endpoint}`);
 
-    const data = await response.json();
-    return data.results || [];
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.log("Proxy API Error:", data);
+      return null;
+    }
+
+    return data;
   } catch (error) {
-    console.log("TMDB Error:", error);
-    return [];
+    console.log("Network Error:", error);
+    return null;
   }
 };
 
-/* ================= MOVIE SECTIONS ================= */
+/* ================= BASIC SECTIONS ================= */
 
-export const fetchTrendingMovies = () =>
-  fetchData("/trending/movie/week");
+export const fetchTrendingMovies = async () => {
+  const data = await fetchFromProxy(
+    "/trending/movie/week"
+  );
+  return data?.results || [];
+};
 
-export const fetchLatestMovies = () =>
-  fetchData("/movie/now_playing", "&language=en-IN");
+export const fetchLatestMovies = async () => {
+  const data = await fetchFromProxy(
+    "/movie/now_playing"
+  );
+  return data?.results || [];
+};
 
-export const fetchTopRatedMovies = () =>
-  fetchData("/movie/top_rated");
+export const fetchTopRatedMovies = async () => {
+  const data = await fetchFromProxy(
+    "/movie/top_rated"
+  );
+  return data?.results || [];
+};
 
-export const fetchUpcomingMovies = () =>
-  fetchData("/movie/upcoming");
+export const fetchUpcomingMovies = async () => {
+  const data = await fetchFromProxy(
+    "/movie/upcoming"
+  );
+  return data?.results || [];
+};
 
-export const fetchPopularMovies = () =>
-  fetchData("/movie/popular");
+export const fetchPopularMovies = async () => {
+  const data = await fetchFromProxy(
+    "/movie/popular"
+  );
+  return data?.results || [];
+};
 
-/* ================= INDIA ================= */
+/* ================= INDIA SECTION ================= */
 
 export const fetchTopIndia = async () => {
-  const results = await fetchData(
-    "/trending/movie/day",
-    "&region=IN"
+  const data = await fetchFromProxy(
+    "/discover/movie?region=IN&sort_by=popularity.desc"
   );
-
-  return results.slice(0, 10);
+  return data?.results?.slice(0, 10) || [];
 };
 
 /* ================= GENRE ================= */
 
-export const fetchByGenre = (genreId: string) =>
-  fetchData(
-    "/discover/movie",
-    `&with_genres=${genreId}`
+export const fetchByGenre = async (genreId: string) => {
+  const data = await fetchFromProxy(
+    `/discover/movie?with_genres=${genreId}`
   );
+  return data?.results || [];
+};
 
 /* ================= SEARCH ================= */
 
-export const searchMulti = async (query: string) =>
-  fetchData(
-    "/search/multi",
-    `&query=${encodeURIComponent(query)}`
+export const searchMulti = async (query: string) => {
+  const data = await fetchFromProxy(
+    `/search/multi?query=${encodeURIComponent(query)}`
   );
+  return data?.results || [];
+};
 
-export const fetchTrendingSearch = async () =>
-  fetchData("/trending/all/day");
+export const fetchTrendingSearch = async () => {
+  const data = await fetchFromProxy(
+    "/trending/all/day"
+  );
+  return data?.results || [];
+};
 
 /* ================= DETAILS ================= */
 
 export const fetchMovieDetails = async (
   movieId: string
 ) => {
-  const res = await fetch(
-    `${BASE_URL}/movie/${movieId}?api_key=${API_KEY}`
+  return await fetchFromProxy(
+    `/movie/${movieId}`
   );
-
-  return await res.json();
 };
+
+/* ================= TRAILER ================= */
 
 export const fetchMovieTrailer = async (
   movieId: string
 ) => {
-  const res = await fetch(
-    `${BASE_URL}/movie/${movieId}/videos?api_key=${API_KEY}`
+  const data = await fetchFromProxy(
+    `/movie/${movieId}/videos`
   );
 
-  const data = await res.json();
-
-  const trailer = data.results?.find(
+  const trailer = data?.results?.find(
     (vid: any) =>
       vid.type === "Trailer" &&
       vid.site === "YouTube"
@@ -105,19 +127,16 @@ export const fetchMovieTrailer = async (
 export const fetchPersonDetails = async (
   personId: string
 ) => {
-  const res = await fetch(
-    `${BASE_URL}/person/${personId}?api_key=${API_KEY}`
+  return await fetchFromProxy(
+    `/person/${personId}`
   );
-  return await res.json();
 };
 
 export const fetchPersonCredits = async (
   personId: string
 ) => {
-  const res = await fetch(
-    `${BASE_URL}/person/${personId}/combined_credits?api_key=${API_KEY}`
+  const data = await fetchFromProxy(
+    `/person/${personId}/combined_credits`
   );
-  const data = await res.json();
-
-  return data.cast || [];
+  return data?.cast || [];
 };

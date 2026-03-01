@@ -68,6 +68,18 @@ export const addItemToList = async (
   const user = auth.currentUser;
   if (!user) return;
 
+  // 🧠 Validate incoming item first
+  if (!item || !item.id) {
+    console.log("❌ Invalid item object:", item);
+    return;
+  }
+
+  const safeTitle =
+    item.title || item.name || "Untitled";
+
+  const safePoster =
+    item.poster_path || "";
+
   const itemRef = doc(
     db,
     "users",
@@ -80,8 +92,8 @@ export const addItemToList = async (
 
   await setDoc(itemRef, {
     id: String(item.id),
-    title: item.title || item.name,
-    poster_path: item.poster_path,
+    title: safeTitle,
+    poster_path: safePoster,
     media_type: item.media_type || "movie",
     rank,
     userRating: 0,
@@ -89,20 +101,19 @@ export const addItemToList = async (
     addedAt: Date.now(),
   });
 
-  // 🔥 Activity Feed Entry
+  // 🔥 Activity Feed Entry (also safe)
   await addDoc(
     collection(db, "users", user.uid, "activity"),
     {
       type: "added_movie",
       listId,
       movieId: String(item.id),
-      title: item.title || item.name,
-      poster_path: item.poster_path,
+      title: safeTitle,
+      poster_path: safePoster,
       createdAt: Date.now(),
     }
   );
 };
-
 /* ================= GET ITEMS ================= */
 
 export const getListItems = async (listId: string) => {
