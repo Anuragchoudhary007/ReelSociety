@@ -93,7 +93,7 @@ export default function MovieDetails() {
     if (exists) {
       await removeItemFromList(
         listId,
-        movie.id.toString()
+String(movie?.id)
       );
       setExists(false);
       return;
