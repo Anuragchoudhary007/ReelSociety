@@ -1,132 +1,159 @@
 import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
+View,
+Text,
+StyleSheet,
+Image,
+FlatList,
+TouchableOpacity,
+ScrollView
 } from "react-native";
 
+import { useLocalSearchParams, useRouter } from "expo-router";
+
 import {
-  doc,
-  getDoc,
-  collection,
-  getDocs,
+doc,
+getDoc,
+collection,
+getDocs
 } from "firebase/firestore";
 
 import { db } from "../../../services/firebase";
-import { useLocalSearchParams, useRouter } from "expo-router";
 
-export default function FriendProfile() {
-  const { uid } = useLocalSearchParams();
-  const router = useRouter();
+export default function FriendProfile(){
 
-  const [userData, setUserData] = useState<any>(null);
-  const [lists, setLists] = useState<any[]>([]);
+const router = useRouter();
+const { uid } = useLocalSearchParams();
 
-  useEffect(() => {
-    const load = async () => {
-      const userSnap = await getDoc(
-        doc(db, "users", uid as string)
-      );
+const [userData,setUserData] = useState<any>(null);
+const [lists,setLists] = useState<any[]>([]);
 
-      if (userSnap.exists()) {
-        setUserData(userSnap.data());
-      }
+useEffect(()=>{
+load();
+},[]);
 
-      const listsSnap = await getDocs(
-        collection(db, "users", uid as string, "lists")
-      );
+const load = async()=>{
 
-      const publicLists: any[] = [];
+if(!uid) return;
 
-      listsSnap.forEach((docSnap) => {
-        const data = docSnap.data();
+/* USER PROFILE */
 
-        if (data.isPublic) {
-          publicLists.push({
-            id: docSnap.id,
-            ...data,
-          });
-        }
-      });
+const userSnap = await getDoc(doc(db,"users",String(uid)));
 
-      setLists(publicLists);
-    };
+if(userSnap.exists()){
+setUserData(userSnap.data());
+}
 
-    load();
-  }, []);
+/* USER LISTS */
 
-  if (!userData) return null;
+const listsSnap = await getDocs(
+collection(db,"users",String(uid),"lists")
+);
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.username}>
-        {userData.username}
-      </Text>
+const userLists = listsSnap.docs.map(doc=>({
+id:doc.id,
+...doc.data()
+}));
 
-      <Text style={styles.section}>
-        Public Lists
-      </Text>
+setLists(userLists);
 
-      <FlatList
-        data={lists}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              router.push(
-                `/users/${uid}/list/${item.id}`
-              )
-            }
-          >
-            <Text style={styles.title}>
-              {item.title}
-            </Text>
+};
 
-            {item.isPublic && (
-              <Text style={styles.public}>
-                🌍 Public
-              </Text>
-            )}
-          </TouchableOpacity>
-        )}
-      />
-    </View>
-  );
+const avatar =
+`https://api.dicebear.com/7.x/bottts/png?seed=${userData?.username || uid}`;
+
+return(
+
+<ScrollView style={styles.container}>
+
+<View style={styles.header}>
+
+<Image
+source={{uri:avatar}}
+style={styles.avatar}
+/>
+
+<Text style={styles.username}>
+{userData?.username || "User"}
+</Text>
+
+</View>
+
+<Text style={styles.section}>
+Lists
+</Text>
+
+<FlatList
+horizontal
+data={lists}
+keyExtractor={(item)=>item.id}
+showsHorizontalScrollIndicator={false}
+renderItem={({item})=>(
+
+<TouchableOpacity
+style={styles.listCard}
+onPress={()=>router.push(`/users/${uid}/list/${item.id}`)}
+>
+
+<Text style={styles.listTitle}>
+{item.title}
+</Text>
+
+</TouchableOpacity>
+
+)}
+/>
+
+<View style={{height:120}}/>
+
+</ScrollView>
+
+);
+
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-    padding: 20,
-  },
-  username: {
-    color: "#fff",
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  section: {
-    color: "#e50914",
-    fontSize: 18,
-    marginBottom: 20,
-  },
-  card: {
-    backgroundColor: "#111",
-    padding: 25,
-    borderRadius: 20,
-    marginBottom: 20,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  public: {
-    color: "#e50914",
-    marginTop: 10,
-  },
+
+container:{
+flex:1,
+backgroundColor:"#000",
+padding:20
+},
+
+header:{
+alignItems:"center",
+marginBottom:30
+},
+
+avatar:{
+width:120,
+height:120,
+borderRadius:60,
+marginBottom:12
+},
+
+username:{
+color:"#fff",
+fontSize:22,
+fontWeight:"bold"
+},
+
+section:{
+color:"#fff",
+fontSize:18,
+marginBottom:12
+},
+
+listCard:{
+backgroundColor:"#111",
+padding:20,
+borderRadius:12,
+marginRight:12
+},
+
+listTitle:{
+color:"#fff",
+fontWeight:"bold"
+}
+
 });

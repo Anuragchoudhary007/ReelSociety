@@ -3,11 +3,16 @@ import {
   View,
   Image,
   TouchableOpacity,
-  StyleSheet,
   Animated,
+  StyleSheet,
 } from "react-native";
+
 import YoutubePlayer from "react-native-youtube-iframe";
-import { IMAGE_BASE_URL, fetchMovieTrailer } from "../services/tmdb";
+
+import {
+  IMAGE_BASE_URL,
+  fetchMovieTrailer,
+} from "../services/tmdb";
 
 interface Props {
   item: any;
@@ -18,18 +23,27 @@ interface Props {
 
 export default function PreviewPoster({
   item,
-  width = 135,
-  height = 205,
+  width = 140,
+  height = 210,
   onPress,
 }: Props) {
   const [showTrailer, setShowTrailer] = useState(false);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   const hoverTimeout = useRef<any>(null);
+
+  /* ================= TRAILER PREVIEW ================= */
 
   const startPreview = async () => {
     hoverTimeout.current = setTimeout(async () => {
-      const trailer = await fetchMovieTrailer(item.id.toString());
+      if (!item?.id) return;
+
+      const trailer = await fetchMovieTrailer(
+        item.id.toString()
+      );
 
       if (trailer) {
         setTrailerKey(trailer);
@@ -37,11 +51,11 @@ export default function PreviewPoster({
 
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 350,
           useNativeDriver: true,
         }).start();
       }
-    }, 800); // 800ms hover delay
+    }, 800);
   };
 
   const stopPreview = () => {
@@ -52,38 +66,128 @@ export default function PreviewPoster({
     fadeAnim.setValue(0);
   };
 
+  /* ================= PRESS ANIMATION ================= */
+
+  const pressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.92,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const pressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  /* ================= IMAGE FADE ================= */
+
+  const onImageLoad = () => {
+    setImageLoaded(true);
+
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  /* ================= POSTER URL ================= */
+
+  const poster =
+    item?.poster_path
+      ? `${IMAGE_BASE_URL}${item.poster_path}`
+      : "https://via.placeholder.com/300x450?text=No+Poster";
+
+  /* ================= UI ================= */
+
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      onPressIn={startPreview}
-      onPressOut={stopPreview}
-      activeOpacity={0.9}
+    <Animated.View
+      style={{
+        transform: [{ scale: scaleAnim }],
+      }}
     >
-      <View style={{ width, height }}>
-        {!showTrailer ? (
-          <Image
-            source={{
-              uri: `${IMAGE_BASE_URL}${item.poster_path}`,
-            }}
-            style={{ width, height, borderRadius: 12 }}
-          />
-        ) : (
-          <Animated.View style={{ opacity: fadeAnim }}>
-            <YoutubePlayer
-              height={height}
-              play={true}
-              mute={true}
-              videoId={trailerKey || ""}
-              initialPlayerParams={{
-                controls: false,
-                autoplay: true,
-                modestbranding: true,
-                rel: false,
-              }}
-            />
-          </Animated.View>
-        )}
-      </View>
-    </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={() => {
+          pressIn();
+          startPreview();
+        }}
+        onPressOut={() => {
+          pressOut();
+          stopPreview();
+        }}
+        activeOpacity={0.9}
+      >
+        <View
+          style={[
+            styles.posterContainer,
+            { width, height },
+          ]}
+        >
+          {!showTrailer ? (
+            <>
+              {!imageLoaded && (
+                <View
+                  style={[
+                    styles.skeleton,
+                    { width, height },
+                  ]}
+                />
+              )}
+
+              <Animated.Image
+                source={{ uri: poster }}
+                style={[
+                  styles.poster,
+                  { width, height, opacity: fadeAnim },
+                ]}
+                onLoad={onImageLoad}
+              />
+            </>
+          ) : (
+            <Animated.View
+              style={{ opacity: fadeAnim }}
+            >
+              <YoutubePlayer
+                height={height}
+                play={true}
+                mute={true}
+                videoId={trailerKey || ""}
+                initialPlayerParams={{
+                  controls: false,
+                  autoplay: true,
+                  modestbranding: true,
+                  rel: false,
+                }}
+              />
+            </Animated.View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
+
+/* ================= STYLES ================= */
+
+const styles = StyleSheet.create({
+  posterContainer: {
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#111",
+    elevation: 6,
+  },
+
+  poster: {
+    borderRadius: 14,
+  },
+
+  skeleton: {
+    position: "absolute",
+    backgroundColor: "#222",
+    borderRadius: 14,
+  },
+});

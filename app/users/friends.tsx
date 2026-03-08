@@ -1,116 +1,307 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
+View,
+Text,
+StyleSheet,
+TouchableOpacity,
+FlatList,
+TextInput,
+Image
 } from "react-native";
 
 import {
-  onSnapshot,
-  collection,
-  query,
-  where,
-  doc,
-  getDoc,
+collection,
+query,
+where,
+getDocs,
+onSnapshot
 } from "firebase/firestore";
 
 import { db, auth } from "../../services/firebase";
-import { removeFriend } from "../../services/friends";
-import { useRouter } from "expo-router";
 
-export default function FriendsScreen() {
-  const [friends, setFriends] = useState<any[]>([]);
-  const router = useRouter();
+export default function FriendsHub(){
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+const [tab,setTab] = useState("friends");
 
-    const q = query(
-      collection(db, "friends"),
-      where("userId", "==", user.uid)
-    );
+const [friends,setFriends] = useState<any[]>([]);
+const [requests,setRequests] = useState<any[]>([]);
+const [users,setUsers] = useState<any[]>([]);
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const enriched = await Promise.all(
-        snapshot.docs.map(async (docSnap) => {
-          const data = docSnap.data();
+const [search,setSearch] = useState("");
 
-          const userSnap = await getDoc(
-            doc(db, "users", data.friendId)
-          );
+/* ================= LOAD FRIENDS ================= */
 
-          return {
-            id: docSnap.id,
-            friendId: data.friendId,
-            username: userSnap.exists()
-              ? userSnap.data().username
-              : "Unknown",
-          };
-        })
-      );
+useEffect(()=>{
 
-      setFriends(enriched);
-    });
+const uid = auth.currentUser?.uid;
+if(!uid) return;
 
-    return unsubscribe;
-  }, []);
+const q = query(
+collection(db,"friends"),
+where("userId","==",uid)
+);
 
-  if (friends.length === 0) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.text}>No friends yet</Text>
-      </View>
-    );
-  }
+return onSnapshot(q,(snapshot)=>{
 
-  return (
-    <FlatList
-      style={{ backgroundColor: "#000", paddingTop: 40 }}
-      data={friends}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <Text style={styles.text}>{item.username}</Text>
+const data = snapshot.docs.map(doc=>doc.data());
 
-          <View style={{ flexDirection: "row", gap: 20 }}>
-            <TouchableOpacity
-              onPress={() =>
-                router.push(`/users/${item.friendId}`)
-              }
-            >
-              <Text style={styles.view}>View</Text>
-            </TouchableOpacity>
+setFriends(data);
 
-            <TouchableOpacity
-              onPress={() => removeFriend(item.friendId)}
-            >
-              <Text style={styles.remove}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    />
-  );
+});
+
+},[]);
+
+/* ================= LOAD REQUESTS ================= */
+
+useEffect(()=>{
+
+const uid = auth.currentUser?.uid;
+if(!uid) return;
+
+const q = query(
+collection(db,"friendRequests"),
+where("receiverId","==",uid)
+);
+
+return onSnapshot(q,(snapshot)=>{
+
+const data = snapshot.docs.map(doc=>doc.data());
+
+setRequests(data);
+
+});
+
+},[]);
+
+/* ================= SEARCH USERS ================= */
+
+const searchUsers = async(text:string)=>{
+
+setSearch(text);
+
+if(text.length < 2) return;
+
+const snapshot = await getDocs(collection(db,"users"));
+
+const results = snapshot.docs
+.map(doc=>({
+id:doc.id,
+...doc.data()
+}))
+.filter((u:any)=>
+u.username?.toLowerCase().includes(text.toLowerCase())
+);
+
+setUsers(results);
+
+};
+
+/* ================= RENDER ================= */
+
+const renderFriends = ()=>{
+
+return(
+
+<FlatList
+data={friends}
+keyExtractor={(item,i)=>i.toString()}
+renderItem={({item})=>(
+
+<View style={styles.row}>
+<Text style={styles.name}>
+Friend
+</Text>
+</View>
+
+)}
+/>
+
+);
+
+};
+
+const renderRequests = ()=>{
+
+return(
+
+<FlatList
+data={requests}
+keyExtractor={(item,i)=>i.toString()}
+renderItem={({item})=>(
+
+<View style={styles.row}>
+<Text style={styles.name}>
+Friend Request
+</Text>
+</View>
+
+)}
+/>
+
+);
+
+};
+
+const renderSearch = ()=>{
+
+return(
+
+<View>
+
+<TextInput
+placeholder="Search users..."
+placeholderTextColor="#777"
+style={styles.input}
+value={search}
+onChangeText={searchUsers}
+/>
+
+<FlatList
+data={users}
+keyExtractor={(item)=>item.id}
+renderItem={({item})=>(
+
+<View style={styles.row}>
+<Text style={styles.name}>
+{item.username}
+</Text>
+</View>
+
+)}
+/>
+
+</View>
+
+);
+
+};
+
+/* ================= UI ================= */
+
+return(
+
+<View style={styles.container}>
+
+<Text style={styles.header}>
+Friends
+</Text>
+
+{/* TABS */}
+
+<View style={styles.tabs}>
+
+<TabBtn
+title="Friends"
+active={tab==="friends"}
+onPress={()=>setTab("friends")}
+/>
+
+<TabBtn
+title="Find"
+active={tab==="search"}
+onPress={()=>setTab("search")}
+/>
+
+<TabBtn
+title="Requests"
+active={tab==="requests"}
+onPress={()=>setTab("requests")}
+/>
+
+</View>
+
+{/* CONTENT */}
+
+{tab==="friends" && renderFriends()}
+{tab==="search" && renderSearch()}
+{tab==="requests" && renderRequests()}
+
+</View>
+
+);
+
 }
 
+/* ================= TAB BUTTON ================= */
+
+function TabBtn({title,active,onPress}:any){
+
+return(
+
+<TouchableOpacity
+onPress={onPress}
+style={[
+styles.tab,
+active && {borderBottomColor:"#e50914"}
+]}
+>
+
+<Text
+style={[
+styles.tabText,
+active && {color:"#fff"}
+]}
+>
+{title}
+</Text>
+
+</TouchableOpacity>
+
+);
+
+}
+
+/* ================= STYLES ================= */
+
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  text: { color: "#fff" },
-  card: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#222",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  remove: { color: "red" },
-  view: { color: "#00ff88" },
+
+container:{
+flex:1,
+backgroundColor:"#000",
+paddingTop:60,
+paddingHorizontal:20
+},
+
+header:{
+color:"#fff",
+fontSize:28,
+fontWeight:"bold",
+marginBottom:20
+},
+
+tabs:{
+flexDirection:"row",
+justifyContent:"space-around",
+marginBottom:20
+},
+
+tab:{
+paddingBottom:8,
+borderBottomWidth:2,
+borderBottomColor:"transparent"
+},
+
+tabText:{
+color:"#777",
+fontSize:16
+},
+
+row:{
+paddingVertical:14,
+borderBottomWidth:1,
+borderBottomColor:"#222"
+},
+
+name:{
+color:"#fff"
+},
+
+input:{
+backgroundColor:"#111",
+color:"#fff",
+padding:12,
+borderRadius:10,
+marginBottom:15
+}
+
 });

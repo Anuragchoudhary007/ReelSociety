@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 
 import {
@@ -29,11 +33,22 @@ import { Ionicons } from "@expo/vector-icons";
 export default function Login() {
   const router = useRouter();
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const handleAuth = async () => {
     try {
@@ -44,8 +59,9 @@ export default function Login() {
         return;
       }
 
+      setLoading(true);
+
       if (isLogin) {
-        /* ================= LOGIN ================= */
         await signInWithEmailAndPassword(
           auth,
           email.trim(),
@@ -54,8 +70,6 @@ export default function Login() {
 
         router.replace("/(tabs)/home");
       } else {
-        /* ================= REGISTER ================= */
-
         const trimmedEmail = email.trim();
         const trimmedPassword = password.trim();
 
@@ -63,7 +77,6 @@ export default function Login() {
           .split("@")[0]
           .toLowerCase();
 
-        /* 🔐 CREATE AUTH USER FIRST */
         const userCredential =
           await createUserWithEmailAndPassword(
             auth,
@@ -73,7 +86,6 @@ export default function Login() {
 
         const uid = userCredential.user.uid;
 
-        /* 🔥 CREATE USER PROFILE */
         await setDoc(doc(db, "users", uid), {
           email: trimmedEmail,
           username: baseUsername,
@@ -83,7 +95,6 @@ export default function Login() {
           createdAt: serverTimestamp(),
         });
 
-        /* 🔥 CREATE DEFAULT WATCHLIST */
         await addDoc(
           collection(db, "users", uid, "lists"),
           {
@@ -107,8 +118,10 @@ export default function Login() {
       } else if (err.code === "auth/weak-password") {
         setError("Password should be at least 6 characters");
       } else {
-        setError(err.message);
+        setError("Something went wrong");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -127,136 +140,162 @@ export default function Login() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ReelSociety</Text>
+    <KeyboardAvoidingView
+      style={styles.wrapper}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+        <Text style={styles.logo}>ReelSociety</Text>
 
-      <TextInput
-        placeholder="Email"
-        placeholderTextColor="#888"
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-        autoCapitalize="none"
-      />
-
-      <View style={styles.passwordContainer}>
-        <TextInput
-          placeholder="Password"
-          placeholderTextColor="#888"
-          secureTextEntry={!showPassword}
-          value={password}
-          onChangeText={setPassword}
-          style={styles.passwordInput}
-        />
-
-        <TouchableOpacity
-          onPress={() => setShowPassword(!showPassword)}
-          style={styles.eyeIcon}
-        >
-          <Ionicons
-            name={showPassword ? "eye-off" : "eye"}
-            size={22}
-            color="#aaa"
+        <View style={styles.card}>
+          <TextInput
+            placeholder="Email"
+            placeholderTextColor="#777"
+            value={email}
+            onChangeText={setEmail}
+            style={styles.input}
+            autoCapitalize="none"
           />
-        </TouchableOpacity>
-      </View>
 
-      {error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : null}
+          <View style={styles.passwordContainer}>
+            <TextInput
+              placeholder="Password"
+              placeholderTextColor="#777"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              style={styles.passwordInput}
+            />
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleAuth}
-      >
-        <Text style={styles.buttonText}>
-          {isLogin ? "Login" : "Register"}
-        </Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off" : "eye"}
+                size={22}
+                color="#aaa"
+              />
+            </TouchableOpacity>
+          </View>
 
-      {isLogin && (
-        <TouchableOpacity onPress={handleResetPassword}>
-          <Text style={styles.resetText}>
-            Forgot Password?
-          </Text>
-        </TouchableOpacity>
-      )}
+          {error ? (
+            <Text style={styles.error}>{error}</Text>
+          ) : null}
 
-      <TouchableOpacity
-        onPress={() => setIsLogin(!isLogin)}
-      >
-        <Text style={styles.switchText}>
-          {isLogin
-            ? "Don't have an account? Register"
-            : "Already have an account? Login"}
-        </Text>
-      </TouchableOpacity>
-    </View>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleAuth}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {isLogin ? "Login" : "Register"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {isLogin && (
+            <TouchableOpacity onPress={handleResetPassword}>
+              <Text style={styles.resetText}>
+                Forgot Password?
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() => setIsLogin(!isLogin)}
+          >
+            <Text style={styles.switchText}>
+              {isLogin
+                ? "Create a new account"
+                : "Already have an account? Login"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 }
 
-/* ================= STYLES ================= */
-
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     flex: 1,
     backgroundColor: "#000",
     justifyContent: "center",
+  },
+
+  container: {
     padding: 30,
   },
-  title: {
-    fontSize: 32,
-    color: "#e50914",
-    marginBottom: 30,
-    textAlign: "center",
+
+  logo: {
+    fontSize: 40,
     fontWeight: "bold",
+    color: "#e50914",
+    textAlign: "center",
+    marginBottom: 40,
   },
+
+  card: {
+    backgroundColor: "#111",
+    padding: 25,
+    borderRadius: 16,
+  },
+
   input: {
     backgroundColor: "#1c1c1c",
     color: "#fff",
     padding: 15,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 15,
   },
+
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#1c1c1c",
-    borderRadius: 8,
+    paddingHorizontal: 15,
+    borderRadius: 10,
     marginBottom: 15,
   },
+
   passwordInput: {
     flex: 1,
     color: "#fff",
-    padding: 15,
+    paddingVertical: 15,
   },
-  eyeIcon: {
-    paddingHorizontal: 15,
-  },
+
   button: {
     backgroundColor: "#e50914",
     padding: 15,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: "center",
     marginTop: 10,
   },
+
   buttonText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 16,
   },
+
   switchText: {
     color: "#aaa",
     textAlign: "center",
-    marginTop: 15,
+    marginTop: 20,
   },
+
   resetText: {
     color: "#e50914",
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
+
   error: {
-    color: "red",
-    marginBottom: 10,
+    color: "#ff4d4d",
     textAlign: "center",
+    marginBottom: 10,
   },
 });
