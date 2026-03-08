@@ -1,71 +1,69 @@
 {
-  "expo": {
-    "name": "ReelSociety",
-    "slug": "ReelSociety",
-    "version": "1.0.0",
+"expo": {
+"name": "ReelSociety",
+"slug": "ReelSociety",
+"version": "1.0.0",
 
-    "orientation": "portrait",
+"orientation": "portrait",
+"userInterfaceStyle": "dark",
 
-    "icon": "./assets/images/icon.png",
+"icon": "./assets/images/icon.png",
+"scheme": "reelsociety",
 
-    "scheme": "reelsociety",
+"newArchEnabled": true,
 
-    "userInterfaceStyle": "dark",
+"ios": {
+  "supportsTablet": true,
+  "bundleIdentifier": "com.anurag.reelsociety"
+},
 
-    "newArchEnabled": true,
+"android": {
+  "package": "com.anurag.reelsociety",
+  "versionCode": 1,
 
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.anurag.reelsociety"
-    },
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/images/icon.png",
+    "backgroundColor": "#0B0B0B"
+  },
 
-    "android": {
-      "package": "com.anurag.reelsociety",
+  "navigationBar": {
+    "backgroundColor": "#0B0B0B"
+  },
 
-      "versionCode": 1,
+  "edgeToEdgeEnabled": true
+},
 
-      "adaptiveIcon": {
-        "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/android-icon-foreground.png"
-      },
+"web": {
+  "output": "static",
+  "favicon": "./assets/images/favicon.png"
+},
 
-      "navigationBar": {
-        "backgroundColor": "#000000"
-      },
+"plugins": [
+  "expo-router",
 
-      "edgeToEdgeEnabled": true
-    },
-
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-
-    "plugins": [
-      "expo-router",
-
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#000000"
-        }
-      ],
-
-      "expo-web-browser"
-    ],
-
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    },
-
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "f9cdbf9f-06bc-4814-a177-46cf229326fe"
-      }
+  [
+    "expo-splash-screen",
+    {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0B0B"
     }
+  ],
+
+  "expo-web-browser"
+],
+
+"experiments": {
+  "typedRoutes": true,
+  "reactCompiler": true
+},
+
+"extra": {
+  "router": {},
+  "eas": {
+    "projectId": "f9cdbf9f-06bc-4814-a177-46cf229326fe"
   }
+}
+
+}
 }
