@@ -10,50 +10,37 @@ ActivityIndicator,
 Alert
 } from "react-native";
 
-import {
-onSnapshot,
-doc,
-getDoc,
-collection,
-query,
-orderBy,
-limit,
-getDocs
-} from "firebase/firestore";
-
 import { LinearGradient } from "expo-linear-gradient";
+
 import { auth, db } from "../../services/firebase";
 import { getUserLists, getListItems } from "../../services/lists";
-import { useRouter } from "expo-router";
 import { listenToFriendCount } from "../../services/friends";
+
+import { doc, getDoc } from "firebase/firestore";
+import { useRouter } from "expo-router";
 
 export default function ProfileScreen(){
 
 const router = useRouter();
 
-/* STATES */
+/* ================= STATES ================= */
 
 const [watchlistCount,setWatchlistCount] = useState(0);
 const [listCount,setListCount] = useState(0);
 const [watchedCount,setWatchedCount] = useState(0);
 const [friendCount,setFriendCount] = useState(0);
 
-const [leaderboard,setLeaderboard] = useState<any[]>([]);
-const [userRank,setUserRank] = useState<number | null>(null);
-
-const [activity,setActivity] = useState<any[]>([]);
-
 const [loading,setLoading] = useState(true);
 const [userData,setUserData] = useState<any>(null);
 
-/* FRIEND COUNT */
+/* ================= FRIEND COUNT ================= */
 
 useEffect(()=>{
 const unsubscribe = listenToFriendCount(setFriendCount);
 return unsubscribe;
 },[]);
 
-/* PROFILE DATA */
+/* ================= PROFILE DATA ================= */
 
 useEffect(()=>{
 
@@ -67,16 +54,22 @@ const lists = await getUserLists();
 setListCount(lists.length);
 
 let watchlistItems = 0;
+let watched = 0;
 
 for(const list of lists){
 
 const items = await getListItems(list.id);
+
 watchlistItems += items.length;
+
+items.forEach((item:any)=>{
+if(item.watched) watched++;
+});
 
 }
 
 setWatchlistCount(watchlistItems);
-setWatchedCount(watchlistItems);
+setWatchedCount(watched);
 
 const snap = await getDoc(doc(db,"users",user.uid));
 
@@ -96,85 +89,14 @@ return unsubscribe;
 
 },[]);
 
-/* LEADERBOARD */
-
-useEffect(()=>{
-
-const loadLeaderboard = async ()=>{
-
-const q = query(
-collection(db,"leaderboard"),
-orderBy("score","desc"),
-limit(10)
-);
-
-const snapshot = await getDocs(q);
-
-const top = snapshot.docs.map((doc,i)=>({
-rank:i+1,
-uid:doc.id,
-...doc.data()
-}));
-
-setLeaderboard(top);
-
-/* FIND USER RANK */
-
-const all = await getDocs(
-query(collection(db,"leaderboard"),orderBy("score","desc"))
-);
-
-let rank = 1;
-
-all.docs.forEach((d)=>{
-
-if(d.id === auth.currentUser?.uid){
-setUserRank(rank);
-}
-
-rank++;
-
-});
-
-};
-
-loadLeaderboard();
-
-},[]);
-
-/* GLOBAL ACTIVITY */
-
-useEffect(()=>{
-
-const q = query(
-collection(db,"activity"),
-orderBy("createdAt","desc"),
-limit(50)
-);
-
-return onSnapshot(q,(snapshot)=>{
-
-const items = snapshot.docs.map(doc=>({
-
-id:doc.id,
-...doc.data()
-
-}));
-
-setActivity(items);
-
-});
-
-},[]);
-
-/* LOGOUT */
+/* ================= LOGOUT ================= */
 
 const handleLogout = async ()=>{
 await auth.signOut();
 router.replace("/login");
 };
 
-/* DELETE ACCOUNT */
+/* ================= DELETE ACCOUNT ================= */
 
 const handleDelete = ()=>{
 
@@ -199,7 +121,7 @@ router.replace("/login");
 
 };
 
-/* LOADING */
+/* ================= LOADING ================= */
 
 if(loading){
 
@@ -219,7 +141,7 @@ const avatar =
 user?.photoURL ||
 `https://api.dicebear.com/7.x/bottts/png?seed=${userData?.username || user?.email}`;
 
-/* UI */
+/* ================= UI ================= */
 
 return(
 
@@ -252,7 +174,7 @@ return(
 
 </View>
 
-{/* FRIENDS */}
+{/* COMMUNITY */}
 
 <Text style={styles.sectionTitle}>Community</Text>
 
@@ -262,119 +184,22 @@ return(
 style={styles.actionBtn}
 onPress={()=>router.push("/users/friends")}
 >
-
-<Text style={styles.actionText}>
-Friends
-</Text>
-
+<Text style={styles.actionText}>Friends</Text>
 </TouchableOpacity>
 
-</View>
+<TouchableOpacity
+style={styles.actionBtn}
+onPress={()=>router.push("/community/leaderboard")}
+>
+<Text style={styles.actionText}>Leaderboard</Text>
+</TouchableOpacity>
 
-{/* LEADERBOARD */}
-
-<Text style={styles.sectionTitle}>Leaderboard</Text>
-
-<View style={styles.fixedBox}>
-
-<ScrollView showsVerticalScrollIndicator={false}>
-
-{leaderboard.map((u:any)=>{
-
-let badge = "";
-
-if(u.rank === 1) badge = "🥇";
-if(u.rank === 2) badge = "🥈";
-if(u.rank === 3) badge = "🥉";
-
-return(
-
-<View key={u.uid} style={styles.rankRow}>
-
-<Image
-source={{
-uri:`https://api.dicebear.com/7.x/bottts/png?seed=${u.uid}`
-}}
-style={styles.rankAvatar}
-/>
-
-<Text style={styles.rankUser}>
-{u.username || "User"}
-</Text>
-
-<Text style={styles.rankScore}>
-#{u.rank} • {u.score} {badge}
-</Text>
-
-</View>
-
-);
-
-})}
-
-<Text style={styles.yourRank}>
-Your Rank #{userRank}
-</Text>
-
-</ScrollView>
-
-</View>
-
-{/* GLOBAL FEED */}
-
-<Text style={styles.sectionTitle}>Activity</Text>
-
-<View style={styles.fixedBox}>
-
-<ScrollView showsVerticalScrollIndicator={false}>
-
-{activity.map(item=>{
-
-return(
-
-<View key={item.id} style={styles.feedItem}>
-
-<Image
-source={{uri:item.avatar}}
-style={styles.feedAvatar}
-/>
-
-<View style={{flex:1}}>
-
-<Text style={styles.feedUser}>
-{item.username}
-</Text>
-
-<Text style={styles.feedMovie}>
-{item.movieTitle}
-</Text>
-
-{item.rating && (
-<Text style={styles.feedRating}>
-⭐ {item.rating}/5
-</Text>
-)}
-
-</View>
-
-{item.poster ? (
-
-<Image
-source={{
-uri:`https://image.tmdb.org/t/p/w500${item.poster}`
-}}
-style={styles.feedPoster}
-/>
-
-) : null}
-
-</View>
-
-);
-
-})}
-
-</ScrollView>
+<TouchableOpacity
+style={styles.actionBtn}
+onPress={()=>router.push("/community/activity")}
+>
+<Text style={styles.actionText}>Activity</Text>
+</TouchableOpacity>
 
 </View>
 
@@ -407,29 +232,22 @@ style={styles.feedPoster}
 
 }
 
-/* STAT CARD */
+/* ================= STAT CARD ================= */
 
 function StatCard({value,label}:{value:number,label:string}){
 
 return(
 
 <View style={styles.statCard}>
-
-<Text style={styles.statNumber}>
-{value}
-</Text>
-
-<Text style={styles.statLabel}>
-{label}
-</Text>
-
+<Text style={styles.statNumber}>{value}</Text>
+<Text style={styles.statLabel}>{label}</Text>
 </View>
 
 );
 
 }
 
-/* STYLES */
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
 
@@ -483,79 +301,13 @@ borderWidth:1,
 borderColor:"#333",
 paddingVertical:14,
 borderRadius:30,
-alignItems:"center"
+alignItems:"center",
+marginBottom:12
 },
 
 actionText:{
 color:"#fff",
 fontWeight:"600"
-},
-
-fixedBox:{
-backgroundColor:"#111",
-marginHorizontal:20,
-marginTop:15,
-borderRadius:16,
-height:220,
-padding:15
-},
-
-rankRow:{
-flexDirection:"row",
-alignItems:"center",
-marginBottom:12
-},
-
-rankAvatar:{
-width:30,
-height:30,
-borderRadius:15,
-marginRight:10
-},
-
-rankUser:{color:"#fff",flex:1},
-
-rankScore:{color:"#e50914"},
-
-yourRank:{
-marginTop:10,
-color:"#fff",
-fontWeight:"bold"
-},
-
-feedItem:{
-flexDirection:"row",
-alignItems:"center",
-marginBottom:14
-},
-
-feedAvatar:{
-width:36,
-height:36,
-borderRadius:18,
-marginRight:10
-},
-
-feedUser:{
-color:"#fff",
-fontWeight:"600"
-},
-
-feedMovie:{
-color:"#aaa",
-fontSize:13
-},
-
-feedRating:{
-color:"#e50914",
-fontSize:12
-},
-
-feedPoster:{
-width:40,
-height:60,
-borderRadius:6,
-marginLeft:10
 },
 
 logoutBtn:{

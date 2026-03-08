@@ -1,24 +1,24 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  FlatList,
-  Image,
-  TouchableOpacity,
-  Animated,
-  ScrollView,
-  Dimensions,
+View,
+Text,
+StyleSheet,
+TextInput,
+FlatList,
+Image,
+TouchableOpacity,
+Animated,
+ScrollView,
+Dimensions
 } from "react-native";
 
 import { useRouter, useFocusEffect } from "expo-router";
 import { BlurView } from "expo-blur";
 
 import {
-  fetchTrendingSearch,
-  searchMulti,
-  IMAGE_BASE_URL
+searchMulti,
+IMAGE_BASE_URL,
+fetchTrendingAll
 } from "../../services/tmdb";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -27,378 +27,414 @@ const { width } = Dimensions.get("window");
 
 const RECENT_KEY = "RECENT_SEARCHES";
 
-export default function SearchScreen() {
+export default function SearchScreen(){
 
-  const router = useRouter();
+const router = useRouter();
 
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const [trending, setTrending] = useState<any[]>([]);
-  const [category, setCategory] = useState("all");
-  const [recent, setRecent] = useState<any[]>([]);
+const [query,setQuery] = useState("");
+const [results,setResults] = useState<any[]>([]);
+const [trending,setTrending] = useState<any[]>([]);
+const [category,setCategory] = useState("all");
+const [recent,setRecent] = useState<any[]>([]);
 
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+/* ================= RESET ON TAB FOCUS ================= */
 
-  /* ================= RESET WHEN TAB FOCUSED ================= */
+useFocusEffect(
+useCallback(()=>{
+setQuery("");
+setResults([]);
+},[])
+);
 
-  useFocusEffect(
-    useCallback(() => {
-      setQuery("");
-      setResults([]);
-    }, [])
-  );
+/* ================= LOAD TRENDING ================= */
 
-  /* ================= LOAD TRENDING ================= */
+useEffect(()=>{
 
-  useEffect(() => {
+const load = async()=>{
 
-    const load = async () => {
+const data = await fetchTrendingAll();
 
-      const data = await fetchTrendingSearch();
+if(data){
+setTrending(data.slice(0,10));
+}
 
-      if (data) {
-        setTrending(data.slice(0, 10));
-      }
+};
 
-    };
+load();
 
-    load();
+},[]);
 
-  }, []);
+/* ================= LOAD RECENT ================= */
 
-  /* ================= LOAD RECENT ================= */
+useEffect(()=>{
 
-  useEffect(() => {
+const loadRecent = async()=>{
 
-    const loadRecent = async () => {
+try{
 
-      const stored = await AsyncStorage.getItem(RECENT_KEY);
+const stored = await AsyncStorage.getItem(RECENT_KEY);
 
-      if (stored) {
-        setRecent(JSON.parse(stored));
-      }
+if(stored){
+setRecent(JSON.parse(stored));
+}
 
-    };
+}catch(err){
+console.log("Recent load error",err);
+}
 
-    loadRecent();
+};
 
-  }, []);
+loadRecent();
 
-  /* ================= SAVE RECENT ================= */
+},[]);
 
-  const saveRecent = async (item: any) => {
+/* ================= SAVE RECENT ================= */
 
-    if (!item?.id) return;
+const saveRecent = async(item:any)=>{
 
-    const updated = [
-      item,
-      ...recent.filter((r) => r.id !== item.id),
-    ].slice(0, 10);
+if(!item?.id) return;
 
-    setRecent(updated);
+const updated = [
+item,
+...recent.filter((r)=>r.id !== item.id)
+].slice(0,10);
 
-    await AsyncStorage.setItem(
-      RECENT_KEY,
-      JSON.stringify(updated)
-    );
+setRecent(updated);
 
-  };
+await AsyncStorage.setItem(
+RECENT_KEY,
+JSON.stringify(updated)
+);
 
-  const removeRecent = async (id: number) => {
+};
 
-    const updated = recent.filter((r) => r.id !== id);
+const removeRecent = async(id:number)=>{
 
-    setRecent(updated);
+const updated = recent.filter((r)=>r.id !== id);
 
-    await AsyncStorage.setItem(
-      RECENT_KEY,
-      JSON.stringify(updated)
-    );
+setRecent(updated);
 
-  };
+await AsyncStorage.setItem(
+RECENT_KEY,
+JSON.stringify(updated)
+);
 
-  /* ================= SEARCH ================= */
+};
 
-  useEffect(() => {
+/* ================= SEARCH ================= */
 
-    const timeout = setTimeout(async () => {
+useEffect(()=>{
 
-      if (!query.trim()) {
-        setResults([]);
-        return;
-      }
+const timeout = setTimeout(async()=>{
 
-      let data = await searchMulti(query);
+if(!query.trim()){
+setResults([]);
+return;
+}
 
-      if (category !== "all") {
-        data = data.filter(
-          (item: any) => item.media_type === category
-        );
-      }
+let data = await searchMulti(query);
 
-      setResults(data);
+if(category !== "all"){
+data = data.filter(
+(item:any)=>item.media_type === category
+);
+}
 
-    }, 350);
+setResults(data);
 
-    return () => clearTimeout(timeout);
+},350);
 
-  }, [query, category]);
+return ()=>clearTimeout(timeout);
 
-  /* ================= NAVIGATION ================= */
+},[query,category]);
 
-  const handlePress = (item: any) => {
+/* ================= NAVIGATION ================= */
 
-    saveRecent(item);
+const handlePress = (item:any)=>{
 
-    if (item.media_type === "person") {
-      router.push(`/person/${item.id}`);
-    } else {
-      router.push(`/movie/${item.id}`);
-    }
+saveRecent(item);
 
-  };
+if(item.media_type === "person"){
+router.push(`/person/${item.id}`);
+}else{
+router.push(`/movie/${item.id}`);
+}
 
-  /* ================= POSTER ANIMATION ================= */
+};
 
-  const pressIn = () => {
+/* ================= UI ================= */
 
-    Animated.spring(scaleAnim, {
-      toValue: 0.95,
-      useNativeDriver: true,
-    }).start();
+return(
 
-  };
+<View style={styles.container}>
 
-  const pressOut = () => {
+{/* HEADER */}
 
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
+<BlurView intensity={40} tint="dark" style={styles.blurHeader}>
 
-  };
+<TextInput
+placeholder="Search movies, shows, people"
+placeholderTextColor="#aaa"
+style={styles.searchInput}
+value={query}
+onChangeText={setQuery}
+/>
 
-  /* ================= UI ================= */
+{/* CATEGORY FILTER */}
 
-  return (
+<ScrollView
+horizontal
+showsHorizontalScrollIndicator={false}
+style={{marginTop:10}}
+>
 
-    <View style={styles.container}>
+{[
+{key:"all",label:"All"},
+{key:"movie",label:"Movies"},
+{key:"tv",label:"Series"},
+{key:"person",label:"People"}
+].map((cat)=>(
 
-      {/* HEADER */}
+<TouchableOpacity
+key={cat.key}
+onPress={()=>setCategory(cat.key)}
+style={[
+styles.categoryBtn,
+category === cat.key && styles.categoryActive
+]}
+>
 
-      <BlurView intensity={40} tint="dark" style={styles.blurHeader}>
+<Text style={styles.catText}>
+{cat.label}
+</Text>
 
-        <TextInput
-          placeholder="Search movies, shows, people"
-          placeholderTextColor="#aaa"
-          style={styles.searchInput}
-          value={query}
-          onChangeText={setQuery}
-        />
+</TouchableOpacity>
 
-        {/* CATEGORY FILTER */}
+))}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginTop: 10 }}
-        >
+</ScrollView>
 
-          {["all", "movie", "tv", "person"].map((cat) => (
+</BlurView>
 
-            <TouchableOpacity
-              key={cat}
-              onPress={() => setCategory(cat)}
-              style={[
-                styles.categoryBtn,
-                category === cat && styles.categoryActive,
-              ]}
-            >
+{/* ================= DEFAULT MODE ================= */}
 
-              <Text style={styles.catText}>
-                {cat}
-              </Text>
+{!query &&(
 
-            </TouchableOpacity>
+<ScrollView showsVerticalScrollIndicator={false}>
 
-          ))}
+{/* RECENT */}
 
-        </ScrollView>
+{recent.length > 0 &&(
 
-      </BlurView>
+<>
 
-      {/* ================= DEFAULT MODE ================= */}
+<Text style={styles.sectionTitle}>
+Recent Searches
+</Text>
 
-      {!query && (
+<ScrollView
+horizontal
+showsHorizontalScrollIndicator={false}
+contentContainerStyle={{paddingHorizontal:15}}
+>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
+{recent.map((item)=>{
 
-          {/* RECENT SEARCHES */}
+const image =
+item.poster_path || item.profile_path;
 
-          {recent.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>
-                🕘 Recent
-              </Text>
+if(!image) return null;
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 15 }}
-              >
+return(
 
-                {recent.map((item) => (
+<View
+key={item.id}
+style={{marginRight:14}}
+>
 
-                  <View
-                    key={item.id}
-                    style={{ marginRight: 14 }}
-                  >
+<TouchableOpacity
+onPress={()=>handlePress(item)}
+>
 
-                    <TouchableOpacity
-                      onPress={() => handlePress(item)}
-                    >
+<Image
+source={{
+uri:`${IMAGE_BASE_URL}${image}`
+}}
+style={styles.smallPoster}
+/>
 
-                      <Image
-                        source={{
-                          uri:
-                            item.poster_path || item.profile_path
-                              ? `${IMAGE_BASE_URL}${item.poster_path || item.profile_path}`
-                              : undefined,
-                        }}
-                        style={styles.smallPoster}
-                      />
+</TouchableOpacity>
 
-                    </TouchableOpacity>
+<TouchableOpacity
+style={styles.clearButton}
+onPress={()=>removeRecent(item.id)}
+>
 
-                    <TouchableOpacity
-                      style={styles.clearButton}
-                      onPress={() => removeRecent(item.id)}
-                    >
+<Text style={{color:"#fff"}}>
+✕
+</Text>
 
-                      <Text style={{ color: "#fff" }}>
-                        ✕
-                      </Text>
+</TouchableOpacity>
 
-                    </TouchableOpacity>
+</View>
 
-                  </View>
+);
 
-                ))}
+})}
 
-              </ScrollView>
-            </>
-          )}
+</ScrollView>
 
-          {/* TRENDING */}
+</>
 
-          <Text style={styles.sectionTitle}>
-            🔥 Trending
-          </Text>
+)}
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 15 }}
-          >
+{/* TRENDING */}
 
-            {trending.map((item) => (
+<Text style={styles.sectionTitle}>
+Trending
+</Text>
 
-              <TouchableOpacity
-                key={item.id}
-                onPress={() => handlePress(item)}
-                style={{ marginRight: 14 }}
-              >
+<ScrollView
+horizontal
+showsHorizontalScrollIndicator={false}
+contentContainerStyle={{paddingHorizontal:15}}
+>
 
-                <Image
-                  source={{
-                    uri:
-                      item.poster_path || item.profile_path
-                        ? `${IMAGE_BASE_URL}${item.poster_path || item.profile_path}`
-                        : undefined,
-                  }}
-                  style={styles.smallPoster}
-                />
+{trending.map((item)=>{
 
-              </TouchableOpacity>
+const image =
+item.poster_path || item.profile_path;
 
-            ))}
+if(!image) return null;
 
-          </ScrollView>
+return(
 
-        </ScrollView>
+<TouchableOpacity
+key={item.id}
+onPress={()=>handlePress(item)}
+style={{marginRight:14}}
+>
 
-      )}
+<Image
+source={{
+uri:`${IMAGE_BASE_URL}${image}`
+}}
+style={styles.smallPoster}
+/>
 
-      {/* ================= SEARCH RESULTS ================= */}
+</TouchableOpacity>
 
-      {query !== "" && (
+);
 
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.id?.toString()}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          renderItem={({ item }) => {
+})}
 
-            const imagePath =
-              item.backdrop_path ||
-              item.poster_path ||
-              item.profile_path;
+</ScrollView>
 
-            return (
+</ScrollView>
 
-              <Animated.View
-                style={{
-                  transform: [{ scale: scaleAnim }],
-                }}
-              >
+)}
 
-                <TouchableOpacity
-                  onPress={() => handlePress(item)}
-                  onPressIn={pressIn}
-                  onPressOut={pressOut}
-                  style={styles.premiumCard}
-                >
+{/* ================= SEARCH RESULTS ================= */}
 
-                  <Image
-                    source={{
-                      uri: imagePath
-                        ? `${IMAGE_BASE_URL}${imagePath}`
-                        : undefined,
-                    }}
-                    style={styles.premiumImage}
-                  />
+{query !== "" &&(
 
-                  <View style={styles.overlay} />
+<FlatList
+data={results}
+keyExtractor={(item,index)=>(item?.id || index).toString()}
+contentContainerStyle={{paddingBottom:120}}
+renderItem={({item})=>(
 
-                  <View style={styles.cardContent}>
+<MovieCard
+item={item}
+onPress={()=>handlePress(item)}
+/>
 
-                    <Text
-                      style={styles.premiumTitle}
-                      numberOfLines={1}
-                    >
-                      {item.title || item.name}
-                    </Text>
+)}
+/>
 
-                    <Text style={styles.mediaTypeText}>
-                      {item.media_type?.toUpperCase()}
-                    </Text>
+)}
 
-                  </View>
+</View>
 
-                </TouchableOpacity>
+);
 
-              </Animated.View>
+}
 
-            );
+/* ================= MOVIE CARD ================= */
 
-          }}
-        />
+function MovieCard({item,onPress}:any){
 
-      )}
+const scale = useRef(new Animated.Value(1)).current;
 
-    </View>
+const pressIn = ()=>{
+Animated.spring(scale,{
+toValue:0.95,
+useNativeDriver:true
+}).start();
+};
 
-  );
+const pressOut = ()=>{
+Animated.spring(scale,{
+toValue:1,
+useNativeDriver:true
+}).start();
+};
+
+const image =
+item.backdrop_path ||
+item.poster_path ||
+item.profile_path;
+
+if(!image) return null;
+
+return(
+
+<Animated.View
+style={{
+transform:[{scale}]
+}}
+>
+
+<TouchableOpacity
+onPress={onPress}
+onPressIn={pressIn}
+onPressOut={pressOut}
+style={styles.premiumCard}
+>
+
+<Image
+source={{
+uri:`${IMAGE_BASE_URL}${image}`
+}}
+style={styles.premiumImage}
+/>
+
+<View style={styles.overlay}/>
+
+<View style={styles.cardContent}>
+
+<Text
+style={styles.premiumTitle}
+numberOfLines={1}
+>
+
+{item.title || item.name}
+
+</Text>
+
+<Text style={styles.mediaTypeText}>
+
+{item.media_type?.toUpperCase()}
+
+</Text>
+
+</View>
+
+</TouchableOpacity>
+
+</Animated.View>
+
+);
 
 }
 
@@ -406,113 +442,112 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
 
-  container:{
-    flex:1,
-    backgroundColor:"#000"
-  },
+container:{
+flex:1,
+backgroundColor:"#000"
+},
 
-  blurHeader:{
-    paddingTop:60,
-    paddingBottom:15,
-    paddingHorizontal:15
-  },
+blurHeader:{
+paddingTop:60,
+paddingBottom:15,
+paddingHorizontal:15
+},
 
-  searchInput:{
-    backgroundColor:"#1a1a1a",
-    borderRadius:25,
-    paddingHorizontal:18,
-    height:45,
-    color:"#fff"
-  },
+searchInput:{
+backgroundColor:"#1a1a1a",
+borderRadius:25,
+paddingHorizontal:18,
+height:45,
+color:"#fff"
+},
 
-  categoryBtn:{
-    paddingHorizontal:14,
-    paddingVertical:6,
-    borderRadius:20,
-    borderWidth:1,
-    borderColor:"#555",
-    marginRight:8
-  },
+categoryBtn:{
+paddingHorizontal:14,
+paddingVertical:6,
+borderRadius:20,
+borderWidth:1,
+borderColor:"#555",
+marginRight:8
+},
 
-  categoryActive:{
-    backgroundColor:"#e50914",
-    borderColor:"#e50914"
-  },
+categoryActive:{
+backgroundColor:"#e50914",
+borderColor:"#e50914"
+},
 
-  catText:{
-    color:"#fff",
-    textTransform:"capitalize"
-  },
+catText:{
+color:"#fff"
+},
 
-  sectionTitle:{
-    color:"#fff",
-    fontSize:18,
-    marginLeft:15,
-    marginBottom:15,
-    marginTop:20,
-    fontWeight:"600"
-  },
+sectionTitle:{
+color:"#fff",
+fontSize:18,
+marginLeft:15,
+marginBottom:15,
+marginTop:20,
+fontWeight:"600"
+},
 
-  smallPoster:{
-    width:130,
-    height:180,
-    borderRadius:16,
-    backgroundColor:"#111"
-  },
+smallPoster:{
+width:130,
+height:180,
+borderRadius:16,
+backgroundColor:"#111"
+},
 
-  clearButton:{
-    position:"absolute",
-    top:8,
-    right:8,
-    backgroundColor:"rgba(0,0,0,0.75)",
-    width:24,
-    height:24,
-    borderRadius:12,
-    justifyContent:"center",
-    alignItems:"center"
-  },
+clearButton:{
+position:"absolute",
+top:8,
+right:8,
+backgroundColor:"rgba(0,0,0,0.75)",
+width:24,
+height:24,
+borderRadius:12,
+justifyContent:"center",
+alignItems:"center"
+},
 
-  premiumCard:{
-    width:width-30,
-    height:220,
-    alignSelf:"center",
-    borderRadius:20,
-    overflow:"hidden",
-    marginBottom:25,
-    backgroundColor:"#111"
-  },
+premiumCard:{
+width:width-30,
+height:220,
+alignSelf:"center",
+borderRadius:20,
+overflow:"hidden",
+marginBottom:25,
+backgroundColor:"#111"
+},
 
-  premiumImage:{
-    width:"100%",
-    height:"100%",
-    position:"absolute"
-  },
+premiumImage:{
+width:"100%",
+height:"100%",
+position:"absolute"
+},
 
-  overlay:{
-    position:"absolute",
-    bottom:0,
-    width:"100%",
-    height:"70%",
-    backgroundColor:"rgba(0,0,0,0.8)"
-  },
+overlay:{
+position:"absolute",
+bottom:0,
+width:"100%",
+height:"70%",
+backgroundColor:"rgba(0,0,0,0.8)"
+},
 
-  cardContent:{
-    position:"absolute",
-    bottom:20,
-    left:20
-  },
+cardContent:{
+position:"absolute",
+bottom:20,
+left:20
+},
 
-  premiumTitle:{
-    color:"#fff",
-    fontSize:22,
-    fontWeight:"bold"
-  },
+premiumTitle:{
+color:"#fff",
+fontSize:22,
+fontWeight:"bold"
+},
 
-  mediaTypeText:{
-    color:"#aaa",
-    fontSize:13,
-    marginTop:4,
-    letterSpacing:1
-  }
+mediaTypeText:{
+color:"#aaa",
+fontSize:13,
+marginTop:4,
+letterSpacing:1
+}
 
 });

@@ -1,253 +1,356 @@
 import { useState, useEffect } from "react";
 import {
-View,
-Text,
-StyleSheet,
-TouchableOpacity,
-FlatList,
-TextInput,
-Image
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  TextInput,
+  Image
 } from "react-native";
 
 import {
-collection,
-query,
-where,
-getDocs,
-onSnapshot
+  collection,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+  doc,
+  getDoc
 } from "firebase/firestore";
 
 import { db, auth } from "../../services/firebase";
+import { useRouter } from "expo-router";
 
-export default function FriendsHub(){
+export default function FriendsHub() {
 
-const [tab,setTab] = useState("friends");
+  const router = useRouter();
 
-const [friends,setFriends] = useState<any[]>([]);
-const [requests,setRequests] = useState<any[]>([]);
-const [users,setUsers] = useState<any[]>([]);
+  const [tab, setTab] = useState("friends");
 
-const [search,setSearch] = useState("");
+  const [friends, setFriends] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
 
-/* ================= LOAD FRIENDS ================= */
+  const [search, setSearch] = useState("");
 
-useEffect(()=>{
+  /* ================= LOAD FRIENDS ================= */
 
-const uid = auth.currentUser?.uid;
-if(!uid) return;
+  useEffect(() => {
 
-const q = query(
-collection(db,"friends"),
-where("userId","==",uid)
-);
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
 
-return onSnapshot(q,(snapshot)=>{
+    const q = query(
+      collection(db, "friends"),
+      where("userId", "==", uid)
+    );
 
-const data = snapshot.docs.map(doc=>doc.data());
+    return onSnapshot(q, async (snapshot) => {
 
-setFriends(data);
+      const data: any[] = [];
+      const seen = new Set();
 
-});
+      for (const docSnap of snapshot.docs) {
 
-},[]);
+        const friendId = docSnap.data().friendId;
 
-/* ================= LOAD REQUESTS ================= */
+        if (seen.has(friendId)) continue;
+        seen.add(friendId);
 
-useEffect(()=>{
+        const userSnap = await getDoc(doc(db, "users", friendId));
 
-const uid = auth.currentUser?.uid;
-if(!uid) return;
+        if (userSnap.exists()) {
 
-const q = query(
-collection(db,"friendRequests"),
-where("receiverId","==",uid)
-);
+          data.push({
+            id: friendId,
+            username: userSnap.data().username || "User"
+          });
 
-return onSnapshot(q,(snapshot)=>{
+        }
 
-const data = snapshot.docs.map(doc=>doc.data());
+      }
 
-setRequests(data);
+      setFriends(data);
 
-});
+    });
 
-},[]);
+  }, []);
 
-/* ================= SEARCH USERS ================= */
+  /* ================= LOAD REQUESTS ================= */
 
-const searchUsers = async(text:string)=>{
+  useEffect(() => {
 
-setSearch(text);
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
 
-if(text.length < 2) return;
+    const q = query(
+      collection(db, "friendRequests"),
+      where("receiverId", "==", uid)
+    );
 
-const snapshot = await getDocs(collection(db,"users"));
+    return onSnapshot(q, async (snapshot) => {
 
-const results = snapshot.docs
-.map(doc=>({
-id:doc.id,
-...doc.data()
-}))
-.filter((u:any)=>
-u.username?.toLowerCase().includes(text.toLowerCase())
-);
+      const data: any[] = [];
 
-setUsers(results);
+      for (const docSnap of snapshot.docs) {
 
-};
+        const senderId = docSnap.data().senderId;
 
-/* ================= RENDER ================= */
+        const userSnap = await getDoc(doc(db, "users", senderId));
 
-const renderFriends = ()=>{
+        if (userSnap.exists()) {
 
-return(
+          data.push({
+            id: senderId,
+            username: userSnap.data().username || "User"
+          });
 
-<FlatList
-data={friends}
-keyExtractor={(item,i)=>i.toString()}
-renderItem={({item})=>(
+        }
 
-<View style={styles.row}>
-<Text style={styles.name}>
-Friend
-</Text>
-</View>
+      }
 
-)}
-/>
+      setRequests(data);
 
-);
+    });
 
-};
+  }, []);
 
-const renderRequests = ()=>{
+  /* ================= SEARCH USERS ================= */
 
-return(
+  const searchUsers = async (text: string) => {
 
-<FlatList
-data={requests}
-keyExtractor={(item,i)=>i.toString()}
-renderItem={({item})=>(
+    setSearch(text);
 
-<View style={styles.row}>
-<Text style={styles.name}>
-Friend Request
-</Text>
-</View>
+    if (text.length < 2) {
+      setUsers([]);
+      return;
+    }
 
-)}
-/>
+    const snapshot = await getDocs(collection(db, "users"));
 
-);
+    const results = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      .filter((u: any) =>
+        u.username?.toLowerCase().includes(text.toLowerCase()) &&
+        u.id !== auth.currentUser?.uid
+      );
 
-};
+    setUsers(results);
 
-const renderSearch = ()=>{
+  };
 
-return(
+  /* ================= FRIEND LIST ================= */
 
-<View>
+  const renderFriends = () => {
 
-<TextInput
-placeholder="Search users..."
-placeholderTextColor="#777"
-style={styles.input}
-value={search}
-onChangeText={searchUsers}
-/>
+    return (
 
-<FlatList
-data={users}
-keyExtractor={(item)=>item.id}
-renderItem={({item})=>(
+      <FlatList
+        data={friends}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => {
 
-<View style={styles.row}>
-<Text style={styles.name}>
-{item.username}
-</Text>
-</View>
+          const avatar =
+            `https://api.dicebear.com/7.x/bottts/png?seed=${item.username}`;
 
-)}
-/>
+          return (
 
-</View>
+            <TouchableOpacity
+              style={styles.friendRow}
+              onPress={() => router.push(`/users/${item.id}`)}
+            >
 
-);
+              <Image
+                source={{ uri: avatar }}
+                style={styles.avatar}
+              />
 
-};
+              <Text style={styles.username}>
+                {item.username}
+              </Text>
 
-/* ================= UI ================= */
+            </TouchableOpacity>
 
-return(
+          );
 
-<View style={styles.container}>
+        }}
+      />
 
-<Text style={styles.header}>
-Friends
-</Text>
+    );
 
-{/* TABS */}
+  };
 
-<View style={styles.tabs}>
+  /* ================= REQUEST LIST ================= */
 
-<TabBtn
-title="Friends"
-active={tab==="friends"}
-onPress={()=>setTab("friends")}
-/>
+  const renderRequests = () => {
 
-<TabBtn
-title="Find"
-active={tab==="search"}
-onPress={()=>setTab("search")}
-/>
+    return (
 
-<TabBtn
-title="Requests"
-active={tab==="requests"}
-onPress={()=>setTab("requests")}
-/>
+      <FlatList
+        data={requests}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => {
 
-</View>
+          const avatar =
+            `https://api.dicebear.com/7.x/bottts/png?seed=${item.username}`;
 
-{/* CONTENT */}
+          return (
 
-{tab==="friends" && renderFriends()}
-{tab==="search" && renderSearch()}
-{tab==="requests" && renderRequests()}
+            <View style={styles.friendRow}>
 
-</View>
+              <Image
+                source={{ uri: avatar }}
+                style={styles.avatar}
+              />
 
-);
+              <View style={{ flex: 1 }}>
+                <Text style={styles.username}>
+                  {item.username}
+                </Text>
+              </View>
+
+              <TouchableOpacity style={styles.acceptBtn}>
+                <Text style={styles.acceptText}>
+                  Accept
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+
+          );
+
+        }}
+      />
+
+    );
+
+  };
+
+  /* ================= SEARCH ================= */
+
+  const renderSearch = () => {
+
+    return (
+
+      <View style={{ flex: 1 }}>
+
+        <TextInput
+          placeholder="Search users..."
+          placeholderTextColor="#777"
+          style={styles.input}
+          value={search}
+          onChangeText={searchUsers}
+        />
+
+        <FlatList
+          data={users}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => {
+
+            const avatar =
+              `https://api.dicebear.com/7.x/bottts/png?seed=${item.username}`;
+
+            return (
+
+              <TouchableOpacity
+                style={styles.friendRow}
+                onPress={() => router.push(`/users/${item.id}`)}
+              >
+
+                <Image
+                  source={{ uri: avatar }}
+                  style={styles.avatar}
+                />
+
+                <Text style={styles.username}>
+                  {item.username}
+                </Text>
+
+              </TouchableOpacity>
+
+            );
+
+          }}
+        />
+
+      </View>
+
+    );
+
+  };
+
+  /* ================= UI ================= */
+
+  return (
+
+    <View style={styles.container}>
+
+      <Text style={styles.header}>
+        Friends
+      </Text>
+
+      <View style={styles.tabs}>
+
+        <TabBtn
+          title="Friends"
+          active={tab === "friends"}
+          onPress={() => setTab("friends")}
+        />
+
+        <TabBtn
+          title="Find"
+          active={tab === "search"}
+          onPress={() => setTab("search")}
+        />
+
+        <TabBtn
+          title="Requests"
+          active={tab === "requests"}
+          onPress={() => setTab("requests")}
+        />
+
+      </View>
+
+      {tab === "friends" && renderFriends()}
+      {tab === "search" && renderSearch()}
+      {tab === "requests" && renderRequests()}
+
+    </View>
+
+  );
 
 }
 
 /* ================= TAB BUTTON ================= */
 
-function TabBtn({title,active,onPress}:any){
+function TabBtn({ title, active, onPress }: any) {
 
-return(
+  return (
 
-<TouchableOpacity
-onPress={onPress}
-style={[
-styles.tab,
-active && {borderBottomColor:"#e50914"}
-]}
->
+    <TouchableOpacity
+      onPress={onPress}
+      style={[
+        styles.tab,
+        active && { borderBottomColor: "#e50914" }
+      ]}
+    >
 
-<Text
-style={[
-styles.tabText,
-active && {color:"#fff"}
-]}
->
-{title}
-</Text>
+      <Text
+        style={[
+          styles.tabText,
+          active && { color: "#fff" }
+        ]}
+      >
+        {title}
+      </Text>
 
-</TouchableOpacity>
+    </TouchableOpacity>
 
-);
+  );
 
 }
 
@@ -255,53 +358,79 @@ active && {color:"#fff"}
 
 const styles = StyleSheet.create({
 
-container:{
-flex:1,
-backgroundColor:"#000",
-paddingTop:60,
-paddingHorizontal:20
-},
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+    paddingTop: 60,
+    paddingHorizontal: 20
+  },
 
-header:{
-color:"#fff",
-fontSize:28,
-fontWeight:"bold",
-marginBottom:20
-},
+  header: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 20
+  },
 
-tabs:{
-flexDirection:"row",
-justifyContent:"space-around",
-marginBottom:20
-},
+  tabs: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 20
+  },
 
-tab:{
-paddingBottom:8,
-borderBottomWidth:2,
-borderBottomColor:"transparent"
-},
+  tab: {
+    paddingBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent"
+  },
 
-tabText:{
-color:"#777",
-fontSize:16
-},
+  tabText: {
+    color: "#777",
+    fontSize: 16
+  },
 
-row:{
-paddingVertical:14,
-borderBottomWidth:1,
-borderBottomColor:"#222"
-},
+  friendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#111"
+  },
 
-name:{
-color:"#fff"
-},
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 15,
+    backgroundColor: "#111"
+  },
 
-input:{
-backgroundColor:"#111",
-color:"#fff",
-padding:12,
-borderRadius:10,
-marginBottom:15
-}
+  username: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500"
+  },
+
+  input: {
+    backgroundColor: "#111",
+    color: "#fff",
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 20,
+    fontSize: 16
+  },
+
+  acceptBtn: {
+    backgroundColor: "#e50914",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+
+  acceptText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 13
+  }
 
 });

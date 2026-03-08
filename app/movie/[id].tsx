@@ -23,6 +23,7 @@ fetchMovieTrailer,
 fetchWatchProviders,
 fetchMovieCredits,
 fetchSimilarMovies,
+fetchSeasonEpisodes,
 IMAGE_BASE_URL
 } from "../../services/tmdb";
 
@@ -41,19 +42,22 @@ export default function MovieDetails(){
 const router = useRouter();
 const { id } = useLocalSearchParams();
 
-/* STATES */
-
 const [movie,setMovie] = useState<any>(null);
 const [providers,setProviders] = useState<any[]>([]);
 const [cast,setCast] = useState<any[]>([]);
 const [similar,setSimilar] = useState<any[]>([]);
 const [seasons,setSeasons] = useState<any[]>([]);
+const [episodes,setEpisodes] = useState<any>({});
+
 const [expandedSeason,setExpandedSeason] = useState<number | null>(null);
 
 const [exists,setExists] = useState(false);
 const [watched,setWatched] = useState(false);
 
 const [listId,setListId] = useState<string | null>(null);
+const [lists,setLists] = useState<any[]>([]);
+const [showListPicker,setShowListPicker] = useState(false);
+const [inCustomList,setInCustomList] = useState(false);
 
 const [rating,setRating] = useState(0);
 
@@ -63,8 +67,6 @@ const [showTrailer,setShowTrailer] = useState(false);
 const [loading,setLoading] = useState(true);
 
 const pulse = useRef(new Animated.Value(1)).current;
-
-/* LOAD MOVIE */
 
 useEffect(()=>{
 
@@ -81,50 +83,47 @@ try{
 const data = await fetchMovieDetails(movieId);
 setMovie(data);
 
-/* SEASONS */
-
 if(data.seasons){
 setSeasons(data.seasons);
 }
 
-/* TRAILER */
-
 const trailer = await fetchMovieTrailer(movieId);
 setTrailerKey(trailer);
-
-/* PROVIDERS */
 
 const providerData = await fetchWatchProviders(movieId);
 setProviders(providerData);
 
-/* CAST */
-
 const credits = await fetchMovieCredits(movieId);
 setCast(credits.slice(0,10));
-
-/* SIMILAR */
 
 const similarMovies = await fetchSimilarMovies(movieId);
 setSimilar(similarMovies.slice(0,10));
 
-/* WATCHLIST */
+const userLists = await getUserLists();
+setLists(userLists);
 
-const lists = await getUserLists();
+if(userLists.length > 0){
 
-if(lists.length > 0){
+setListId(userLists[0].id);
 
-const firstList = lists[0];
-setListId(firstList.id);
+for(const list of userLists){
 
-const items = await getListItems(firstList.id);
+const items = await getListItems(list.id);
 
 const item = items.find(
 (i:any)=>String(i.id) === movieId
 );
 
 if(item){
+
 setExists(true);
 setWatched(item.watched || false);
+setInCustomList(true);
+
+break;
+
+}
+
 }
 
 }
@@ -139,7 +138,30 @@ setLoading(false);
 
 };
 
-/* WATCHLIST */
+const toggleSeason = async(season:any)=>{
+
+if(expandedSeason === season.id){
+setExpandedSeason(null);
+return;
+}
+
+setExpandedSeason(season.id);
+
+if(!episodes[season.id]){
+
+const eps = await fetchSeasonEpisodes(
+String(movie.id),
+season.season_number
+);
+
+setEpisodes(prev=>({
+...prev,
+[season.id]:eps
+}));
+
+}
+
+};
 
 const toggleWatchlist = async()=>{
 
@@ -164,8 +186,6 @@ Animated.timing(pulse,{toValue:1,duration:120,useNativeDriver:true})
 
 };
 
-/* WATCHED */
-
 const toggleWatched = async()=>{
 
 if(!listId || !movie) return;
@@ -181,7 +201,18 @@ setWatched(!watched);
 
 };
 
-/* RATING */
+const addToSelectedList = async(list:any)=>{
+
+await addItemToList(
+list.id,
+movie,
+Date.now()
+);
+
+setInCustomList(true);
+setShowListPicker(false);
+
+};
 
 const renderStars = ()=>{
 
@@ -210,8 +241,6 @@ return stars;
 
 };
 
-/* LOADING */
-
 if(loading){
 
 return(
@@ -224,29 +253,16 @@ return(
 
 if(!movie) return null;
 
-/* TYPE */
-
-let type="Movie";
-
-if(movie.first_air_date) type="TV Series";
-if(movie.origin_country?.includes("JP")) type="Anime";
-
-/* BACKDROP */
-
 const backdrop =
 movie.backdrop_path
 ? `${IMAGE_BASE_URL}${movie.backdrop_path}`
 : `${IMAGE_BASE_URL}${movie.poster_path}`;
-
-/* UI */
 
 return(
 
 <View style={{flex:1}}>
 
 <ScrollView style={styles.container}>
-
-{/* HERO */}
 
 <View style={styles.hero}>
 
@@ -276,22 +292,6 @@ style={styles.poster}
 <Text style={styles.meta}>
 ⭐ {movie.vote_average}
 </Text>
-
-{/* TYPE */}
-
-<View style={styles.typeBadge}>
-<Text style={styles.typeText}>{type}</Text>
-</View>
-
-{/* SEASON INFO */}
-
-{movie.number_of_seasons && (
-
-<Text style={styles.meta}>
-Seasons: {movie.number_of_seasons} • Episodes: {movie.number_of_episodes}
-</Text>
-
-)}
 
 {/* WATCHLIST */}
 
@@ -333,7 +333,22 @@ onPress={toggleWatched}
 
 )}
 
-{/* RATING */}
+{/* ADD TO LIST */}
+
+<TouchableOpacity
+style={[
+styles.addListBtn,
+{ backgroundColor: inCustomList ? "#333" : "#e50914" }
+]}
+onPress={()=>setShowListPicker(true)}
+disabled={inCustomList}
+>
+
+<Text style={styles.watchlistText}>
+{inCustomList ? "✓ Added to List" : "Add To List"}
+</Text>
+
+</TouchableOpacity>
 
 <View style={styles.ratingRow}>
 {renderStars()}
@@ -349,7 +364,7 @@ onPress={()=>setShowTrailer(true)}
 >
 
 <Text style={styles.trailerText}>
-🎬 Watch Trailer
+Watch Trailer
 </Text>
 
 </TouchableOpacity>
@@ -394,8 +409,6 @@ style={styles.providerLogo}
 
 )}
 
-{/* OVERVIEW */}
-
 <Text style={styles.section}>Overview</Text>
 
 <Text style={styles.overview}>
@@ -417,9 +430,7 @@ return(
 <View key={s.id} style={styles.seasonCard}>
 
 <TouchableOpacity
-onPress={()=>setExpandedSeason(
-expandedSeason===s.id?null:s.id
-)}
+onPress={()=>toggleSeason(s)}
 >
 
 <Text style={styles.seasonTitle}>
@@ -427,6 +438,24 @@ Season {s.season_number} • {s.episode_count} Episodes
 </Text>
 
 </TouchableOpacity>
+
+{expandedSeason === s.id && episodes[s.id] && (
+
+<View style={styles.episodeContainer}>
+
+{episodes[s.id].map((ep:any)=>{
+
+return(
+
+<View key={ep.id} style={styles.episodeRow}>
+
+<Text style={styles.episodeNumber}>
+E{ep.episode_number}
+</Text>
+
+<Text style={styles.episodeTitle}>
+{ep.name}
+</Text>
 
 </View>
 
@@ -438,7 +467,15 @@ Season {s.season_number} • {s.episode_count} Episodes
 
 )}
 
-{/* CAST */}
+</View>
+
+);
+
+})}
+
+</View>
+
+)}
 
 <Text style={styles.section}>Cast</Text>
 
@@ -468,8 +505,6 @@ style={styles.castImage}
 
 )}
 />
-
-{/* SIMILAR */}
 
 <Text style={styles.section}>Similar Movies</Text>
 
@@ -502,13 +537,12 @@ style={styles.posterSmall}
 
 </ScrollView>
 
-{/* TRAILER MODAL */}
+{/* TRAILER */}
 
 <Modal
 isVisible={showTrailer}
 onBackdropPress={()=>setShowTrailer(false)}
 style={styles.modal}
-backdropOpacity={0.85}
 >
 
 <View style={styles.modalBox}>
@@ -530,13 +564,55 @@ onPress={()=>setShowTrailer(false)}
 
 </Modal>
 
+{/* LIST PICKER */}
+
+<Modal
+isVisible={showListPicker}
+onBackdropPress={()=>setShowListPicker(false)}
+style={styles.modal}
+>
+
+<View style={styles.modalBox}>
+
+<Text style={styles.section}>
+Select List
+</Text>
+
+{lists.length === 0 ? (
+
+<Text style={{color:"#aaa",marginTop:10}}>
+No lists created yet
+</Text>
+
+) : (
+
+lists.map((l:any)=>(
+
+<TouchableOpacity
+key={l.id}
+style={styles.listRow}
+onPress={()=>addToSelectedList(l)}
+>
+
+<Text style={styles.listName}>
+{l.title || "Untitled List"}
+</Text>
+
+</TouchableOpacity>
+
+))
+
+)}
+
+</View>
+
+</Modal>
+
 </View>
 
 );
 
 }
-
-/* STYLES */
 
 const styles = StyleSheet.create({
 
@@ -563,17 +639,6 @@ title:{color:"#fff",fontSize:26,fontWeight:"bold"},
 
 meta:{color:"#aaa",marginTop:6},
 
-typeBadge:{
-backgroundColor:"#e50914",
-alignSelf:"flex-start",
-paddingHorizontal:10,
-paddingVertical:4,
-borderRadius:6,
-marginTop:6
-},
-
-typeText:{color:"#fff",fontWeight:"bold"},
-
 watchlistBtn:{
 marginTop:20,
 padding:14,
@@ -583,6 +648,14 @@ alignItems:"center"
 
 watchedBtn:{
 marginTop:10,
+padding:14,
+borderRadius:10,
+alignItems:"center"
+},
+
+addListBtn:{
+marginTop:10,
+backgroundColor:"#e50914",
 padding:14,
 borderRadius:10,
 alignItems:"center"
@@ -634,6 +707,34 @@ marginBottom:10
 },
 
 seasonTitle:{color:"#fff",fontWeight:"bold"},
+
+episodeContainer:{marginTop:10},
+
+episodeRow:{
+flexDirection:"row",
+paddingVertical:6
+},
+
+episodeNumber:{
+color:"#e50914",
+marginRight:8
+},
+
+episodeTitle:{
+color:"#ccc",
+flex:1
+},
+
+listRow:{
+paddingVertical:14,
+borderBottomWidth:1,
+borderBottomColor:"#222"
+},
+
+listName:{
+color:"#fff",
+fontSize:16
+},
 
 center:{
 flex:1,

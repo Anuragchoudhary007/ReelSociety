@@ -14,10 +14,6 @@ getDoc
 
 import { db, auth } from "./firebase";
 
-/* =====================================================
-CREATE GLOBAL ACTIVITY
-===================================================== */
-
 const createGlobalActivity = async (
 type:string,
 movie:any,
@@ -27,45 +23,25 @@ rating?:number
 const user = auth.currentUser;
 if(!user) return;
 
-/* GET USER DATA */
-
-const userSnap = await getDoc(
-doc(db,"users",user.uid)
-);
+const userSnap = await getDoc(doc(db,"users",user.uid));
 
 const username = userSnap.exists()
 ? userSnap.data().username
 : "User";
 
-/* SAFE AVATAR */
-
 const avatar = userSnap.exists()
 ? userSnap.data().avatar || `https://api.dicebear.com/7.x/bottts/png?seed=${username}`
 : `https://api.dicebear.com/7.x/bottts/png?seed=${username}`;
-
-/* SAFE POSTER */
 
 const poster = movie?.poster_path
 ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
 : "";
 
-/* ACTION LABEL */
-
 let action = "activity";
 
-if(type === "added_movie"){
-action = "added";
-}
-
-if(type === "watched_movie"){
-action = "watched";
-}
-
-if(type === "rated_movie"){
-action = "rated";
-}
-
-/* SAVE GLOBAL ACTIVITY */
+if(type === "added_movie") action = "added";
+if(type === "watched_movie") action = "watched";
+if(type === "rated_movie") action = "rated";
 
 await addDoc(
 collection(db,"activity"),
@@ -76,6 +52,7 @@ action,
 
 userId:user.uid,
 username,
+
 avatar,
 
 movieId:movie?.id || null,
@@ -91,10 +68,6 @@ createdAt:Date.now()
 
 };
 
-/* =====================================================
-CREATE LIST
-===================================================== */
-
 export const createList = async (
 title:string,
 description:string,
@@ -104,15 +77,13 @@ isPublic:boolean
 const user = auth.currentUser;
 if(!user) return null;
 
-const listRef = doc(
-collection(db,"users",user.uid,"lists")
-);
+const listRef = doc(collection(db,"users",user.uid,"lists"));
 
 await setDoc(listRef,{
 
 title:title || "Untitled List",
 description:description || "",
-isPublic,
+isPublic:isPublic || false,
 createdAt:Date.now(),
 updatedAt:Date.now()
 
@@ -121,10 +92,6 @@ updatedAt:Date.now()
 return listRef.id;
 
 };
-
-/* =====================================================
-GET USER LISTS
-===================================================== */
 
 export const getUserLists = async()=>{
 
@@ -143,15 +110,14 @@ const snapshot = await getDocs(listsRef);
 return snapshot.docs.map(doc=>({
 
 id:doc.id,
-...doc.data()
+title:doc.data().title || "Untitled List",
+description:doc.data().description || "",
+isPublic:doc.data().isPublic || false,
+createdAt:doc.data().createdAt || 0
 
 }));
 
 };
-
-/* =====================================================
-ADD ITEM TO LIST
-===================================================== */
 
 export const addItemToList = async(
 listId:string,
@@ -166,8 +132,6 @@ if(!item || !item.id) return;
 
 const safeTitle = item.title || item.name || "Untitled";
 const safePoster = item.poster_path || "";
-
-/* SAVE MOVIE */
 
 const itemRef = doc(
 db,
@@ -192,8 +156,6 @@ addedAt:Date.now()
 
 });
 
-/* PROFILE ACTIVITY */
-
 await addDoc(
 collection(db,"users",user.uid,"activity"),
 {
@@ -206,15 +168,9 @@ createdAt:Date.now()
 }
 );
 
-/* GLOBAL ACTIVITY */
-
 await createGlobalActivity("added_movie",item);
 
 };
-
-/* =====================================================
-GET LIST ITEMS
-===================================================== */
 
 export const getListItems = async(listId:string)=>{
 
@@ -243,9 +199,28 @@ id:doc.id,
 
 };
 
-/* =====================================================
-UPDATE RATING
-===================================================== */
+export const updateItemRank = async (
+  listId: string,
+  itemId: string,
+  rank: number
+) => {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const itemRef = doc(
+    db,
+    "users",
+    user.uid,
+    "lists",
+    listId,
+    "items",
+    itemId
+  );
+
+  await updateDoc(itemRef, {
+    rank
+  });
+};
 
 export const updateItemRating = async(
 listId:string,
@@ -271,8 +246,6 @@ await updateDoc(itemRef,{
 userRating:rating
 });
 
-/* GLOBAL ACTIVITY */
-
 await createGlobalActivity(
 "rated_movie",
 movie,
@@ -280,10 +253,6 @@ rating
 );
 
 };
-
-/* =====================================================
-TOGGLE WATCHED STATUS
-===================================================== */
 
 export const toggleWatchedStatus = async(
 listId:string,
@@ -305,13 +274,9 @@ listId,
 String(itemId)
 );
 
-/* TOGGLE WATCHED */
-
 await updateDoc(itemRef,{
 watched:!currentStatus
 });
-
-/* UPDATE LEADERBOARD */
 
 const leaderboardRef = doc(
 db,
@@ -329,8 +294,6 @@ updatedAt:Date.now()
 { merge:true }
 );
 
-/* PROFILE ACTIVITY */
-
 await addDoc(
 collection(db,"users",user.uid,"activity"),
 {
@@ -341,18 +304,12 @@ createdAt:Date.now()
 }
 );
 
-/* GLOBAL ACTIVITY */
-
 await createGlobalActivity(
 "watched_movie",
 movie
 );
 
 };
-
-/* =====================================================
-REMOVE ITEM FROM LIST
-===================================================== */
 
 export const removeItemFromList = async(
 listId:string,
@@ -375,10 +332,6 @@ String(itemId)
 await deleteDoc(itemRef);
 
 };
-
-/* =====================================================
-DELETE LIST
-===================================================== */
 
 export const deleteList = async (listId:string)=>{
 

@@ -9,22 +9,22 @@ TouchableOpacity,
 Animated,
 StatusBar,
 Dimensions,
-ActivityIndicator
+ActivityIndicator,
+RefreshControl
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { getDocs, collection } from "firebase/firestore";
+
+import { collection, getDocs } from "firebase/firestore";
 
 import { db } from "../../services/firebase";
 import { AuthContext } from "../../context/AuthProvider";
 
 import {
 fetchTrendingMovies,
-fetchLatestMovies,
-fetchTopIndia,
-fetchByGenre,
+fetchHomeSections,
 IMAGE_BASE_URL
 } from "../../services/tmdb";
 
@@ -36,75 +36,76 @@ const HERO_HEIGHT = 420;
 export default function Home(){
 
 const router = useRouter();
-const scrollY = useRef(new Animated.Value(0)).current;
-
 const heroListRef = useRef<FlatList>(null);
 
 const authContext = useContext(AuthContext);
 const user = authContext?.user;
 
 const [loading,setLoading] = useState(true);
+const [refreshing,setRefreshing] = useState(false);
 
 const [heroes,setHeroes] = useState<any[]>([]);
-const [activeIndex,setActiveIndex] = useState(0);
+const [rows,setRows] = useState<any[]>([]);
 
 const [recommended,setRecommended] = useState<any[]>([]);
-const [homeData,setHomeData] = useState<any>({});
+const [friendsWatching,setFriendsWatching] = useState<any[]>([]);
+const [becauseWatched,setBecauseWatched] = useState<any[]>([]);
 
-/* ================= LOAD MOVIES ================= */
+const [activeIndex,setActiveIndex] = useState(0);
 
-useEffect(()=>{
+/* ================= LOAD HOME ================= */
 
-const loadData = async ()=>{
+const loadHome = async()=>{
 
 try{
 
 const trending = await fetchTrendingMovies();
-
 setHeroes(trending.slice(0,5));
 
-const data = {
-latest: await fetchLatestMovies(),
-topIndia: await fetchTopIndia(),
-action: await fetchByGenre("28"),
-romance: await fetchByGenre("10749"),
-crime: await fetchByGenre("80"),
-comedy: await fetchByGenre("35"),
-thriller: await fetchByGenre("53"),
-family: await fetchByGenre("10751"),
-};
-
-setHomeData(data);
+const sections = await fetchHomeSections();
+setRows(sections);
 
 }catch(err){
+
 console.log("Home Load Error",err);
+
 }
 
 setLoading(false);
 
 };
 
-loadData();
+/* ================= REFRESH ================= */
 
+const onRefresh = async()=>{
+
+setRefreshing(true);
+await loadHome();
+setRefreshing(false);
+
+};
+
+/* ================= LOAD ON START ================= */
+
+useEffect(()=>{
+loadHome();
 },[]);
 
 /* ================= HERO AUTO SCROLL ================= */
 
 useEffect(()=>{
 
-if(heroes.length === 0) return;
+if(heroes.length===0) return;
 
 const interval = setInterval(()=>{
 
 let next = activeIndex + 1;
 
-if(next >= heroes.length){
-next = 0;
-}
+if(next >= heroes.length) next = 0;
 
 heroListRef.current?.scrollToOffset({
 offset: next * width,
-animated: true
+animated:true
 });
 
 setActiveIndex(next);
@@ -121,7 +122,7 @@ useEffect(()=>{
 
 if(!user) return;
 
-const loadRecommendations = async ()=>{
+const loadAI = async()=>{
 
 try{
 
@@ -131,9 +132,13 @@ collection(db,"users",user.uid,"lists")
 
 const watchlist = snapshot.docs.map(doc=>doc.data());
 
-const aiData = await generateRecommendations(watchlist);
+const ai = await generateRecommendations(watchlist);
 
-setRecommended(aiData);
+setRecommended(ai);
+
+/* BECAUSE YOU WATCHED */
+
+setBecauseWatched(ai.slice(0,12));
 
 }catch(err){
 
@@ -143,19 +148,40 @@ console.log("AI Error",err);
 
 };
 
-loadRecommendations();
+loadAI();
 
 },[user]);
 
-/* ================= HERO FADE ================= */
+/* ================= FRIENDS WATCHING ================= */
 
-const heroFade = scrollY.interpolate({
+useEffect(()=>{
 
-inputRange:[0,HERO_HEIGHT * 0.6],
-outputRange:[0,1],
-extrapolate:"clamp"
+if(!user) return;
 
-});
+const loadFriendsWatching = async()=>{
+
+try{
+
+const activitySnap = await getDocs(collection(db,"activity"));
+
+const data = activitySnap.docs
+.map(doc=>doc.data())
+.filter((a:any)=>a.poster)
+.slice(0,15);
+
+setFriendsWatching(data);
+
+}catch(err){
+
+console.log("Friends Watching Error",err);
+
+}
+
+};
+
+loadFriendsWatching();
+
+},[user]);
 
 /* ================= HERO ================= */
 
@@ -171,14 +197,8 @@ onPress={()=>router.push(`/movie/${item.id}`)}
 <View style={{width,height:HERO_HEIGHT}}>
 
 <Image
-source={{
-uri:`${IMAGE_BASE_URL}${item.backdrop_path}`
-}}
+source={{uri:`${IMAGE_BASE_URL}${item.backdrop_path}`}}
 style={{width,height:HERO_HEIGHT}}
-/>
-
-<Animated.View
-style={[styles.heroShadow,{opacity:heroFade}]}
 />
 
 <LinearGradient
@@ -198,7 +218,7 @@ onPress={()=>router.push(`/movie/${item.id}`)}
 >
 
 <Text style={styles.playText}>
-▶ Play
+Play
 </Text>
 
 </TouchableOpacity>
@@ -220,12 +240,7 @@ if(loading){
 return(
 
 <View style={styles.loading}>
-
-<ActivityIndicator
-size="large"
-color="#e50914"
-/>
-
+<ActivityIndicator size="large" color="#e50914"/>
 </View>
 
 );
@@ -241,18 +256,17 @@ return(
 <StatusBar barStyle="light-content"/>
 
 <View style={styles.header}>
-<Text style={styles.logo}>
-ReelSociety
-</Text>
+<Text style={styles.logo}>ReelSociety</Text>
 </View>
 
 <Animated.ScrollView
-showsVerticalScrollIndicator={false}
-scrollEventThrottle={16}
-onScroll={Animated.event(
-[{nativeEvent:{contentOffset:{y:scrollY}}}],
-{useNativeDriver:false}
-)}
+refreshControl={
+<RefreshControl
+refreshing={refreshing}
+onRefresh={onRefresh}
+tintColor="#e50914"
+/>
+}
 >
 
 {/* HERO */}
@@ -263,32 +277,35 @@ data={heroes}
 horizontal
 pagingEnabled
 renderItem={renderHero}
-keyExtractor={(item)=>item.id.toString()}
+keyExtractor={(item:any)=>item.id.toString()}
 showsHorizontalScrollIndicator={false}
-onMomentumScrollEnd={(e)=>{
-
-const index = Math.round(
-e.nativeEvent.contentOffset.x / width
-);
-
-setActiveIndex(index);
-
-}}
 />
 
-{/* MOVIE ROWS */}
+{/* AI RECOMMENDED */}
 
-{recommended.length > 0 &&
-renderRow("🎯 Recommended",recommended,router)}
+{recommended.length>0 &&
+renderRow("Recommended For You",recommended,router)
+}
 
-{renderRow("🆕 Latest",homeData.latest,router)}
-{renderRow("🇮🇳 Top India",homeData.topIndia,router)}
-{renderRow("💥 Action",homeData.action,router)}
-{renderRow("❤️ Romance",homeData.romance,router)}
-{renderRow("🔫 Crime",homeData.crime,router)}
-{renderRow("😂 Comedy",homeData.comedy,router)}
-{renderRow("🔥 Thriller",homeData.thriller,router)}
-{renderRow("👨‍👩‍👧 Family",homeData.family,router)}
+{/* BECAUSE YOU WATCHED */}
+
+{becauseWatched.length>0 &&
+renderRow("Because You Watched",becauseWatched,router)
+}
+
+{/* FRIENDS WATCHING */}
+
+{friendsWatching.length>0 &&
+renderRow("Friends Are Watching",friendsWatching,router)
+}
+
+{/* GENRE ROWS */}
+
+{rows.map((row,index)=>(
+  <View key={row.title + index}>
+    {renderRow(row.title,row.data,router)}
+  </View>
+))}
 
 <View style={{height:120}}/>
 
@@ -300,7 +317,7 @@ renderRow("🎯 Recommended",recommended,router)}
 
 }
 
-/* ================= MOVIE ROW ================= */
+/* ================= ROW ================= */
 
 function renderRow(title:string,data:any[],router:any){
 
@@ -308,24 +325,23 @@ if(!data || data.length===0) return null;
 
 return(
 
-<View style={{marginTop:26}}>
+<View style={{marginTop:28}}>
 
 <Text style={styles.rowTitle}>
 {title}
 </Text>
 
+<View style={styles.titleUnderline}/>
+
 <FlatList
 horizontal
-data={data}
-keyExtractor={(item)=>item.id.toString()}
+data={data.slice(0,12)}
+keyExtractor={(item,index)=> (item?.id || index).toString()}
 showsHorizontalScrollIndicator={false}
-contentContainerStyle={{paddingHorizontal:12}}
+contentContainerStyle={{paddingHorizontal:16}}
 renderItem={({item})=>(
 
-<MoviePoster
-item={item}
-router={router}
-/>
+<MoviePoster item={item} router={router}/>
 
 )}
 />
@@ -343,31 +359,16 @@ function MoviePoster({item,router}:any){
 const scale = useRef(new Animated.Value(1)).current;
 
 const pressIn = ()=>{
-
-Animated.spring(scale,{
-toValue:0.9,
-useNativeDriver:true
-}).start();
-
+Animated.spring(scale,{toValue:0.9,useNativeDriver:true}).start();
 };
 
 const pressOut = ()=>{
-
-Animated.spring(scale,{
-toValue:1,
-useNativeDriver:true
-}).start();
-
+Animated.spring(scale,{toValue:1,useNativeDriver:true}).start();
 };
 
 return(
 
-<Animated.View
-style={{
-transform:[{scale}],
-marginRight:14
-}}
->
+<Animated.View style={{transform:[{scale}],marginRight:14}}>
 
 <TouchableOpacity
 activeOpacity={0.8}
@@ -377,9 +378,7 @@ onPress={()=>router.push(`/movie/${item.id}`)}
 >
 
 <Image
-source={{
-uri:`${IMAGE_BASE_URL}${item.poster_path}`
-}}
+source={{uri:`${IMAGE_BASE_URL}${item.poster_path || item.poster}`}}
 style={styles.poster}
 />
 
@@ -395,42 +394,15 @@ style={styles.poster}
 
 const styles = StyleSheet.create({
 
-container:{
-flex:1,
-backgroundColor:"#000"
-},
+container:{flex:1,backgroundColor:"#000"},
 
-loading:{
-flex:1,
-backgroundColor:"#000",
-justifyContent:"center",
-alignItems:"center"
-},
+loading:{flex:1,justifyContent:"center",alignItems:"center",backgroundColor:"#000"},
 
-header:{
-paddingHorizontal:18,
-paddingTop:10,
-paddingBottom:8
-},
+header:{paddingHorizontal:18,paddingTop:10,paddingBottom:8},
 
-logo:{
-color:"#e50914",
-fontSize:26,
-fontWeight:"bold"
-},
+logo:{color:"#e50914",fontSize:26,fontWeight:"bold"},
 
-heroShadow:{
-position:"absolute",
-...StyleSheet.absoluteFillObject,
-backgroundColor:"#000"
-},
-
-gradient:{
-position:"absolute",
-bottom:0,
-height:180,
-width:"100%"
-},
+gradient:{position:"absolute",bottom:0,height:180,width:"100%"},
 
 heroTitle:{
 position:"absolute",
@@ -438,16 +410,10 @@ bottom:90,
 left:20,
 color:"#fff",
 fontSize:30,
-fontWeight:"bold",
-width:width * 0.8
+fontWeight:"bold"
 },
 
-heroButtons:{
-position:"absolute",
-bottom:40,
-left:20,
-flexDirection:"row"
-},
+heroButtons:{position:"absolute",bottom:40,left:20},
 
 playButton:{
 backgroundColor:"#e50914",
@@ -456,17 +422,22 @@ paddingVertical:11,
 borderRadius:30
 },
 
-playText:{
-color:"#fff",
-fontWeight:"bold"
-},
+playText:{color:"#fff",fontWeight:"bold"},
 
 rowTitle:{
 color:"#fff",
-fontSize:19,
-marginLeft:12,
-marginBottom:12,
-fontWeight:"600"
+fontSize:20,
+marginLeft:16,
+marginBottom:4,
+fontWeight:"700"
+},
+
+titleUnderline:{
+height:2,
+width:40,
+backgroundColor:"#e50914",
+marginLeft:16,
+marginBottom:12
 },
 
 poster:{
